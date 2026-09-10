@@ -1,0 +1,118 @@
+{{define "page"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Job Queue Dashboard</title>
+  <script src="/static/htmx.min.js"></script>
+  <style>
+    :root {
+      --bg: #f6f7f9; --surface: #ffffff; --border: #e3e6ea; --text: #1b1f24;
+      --muted: #6b7280; --pending: #6b7280; --running: #2563eb;
+      --failed: #dc2626; --completed: #059669;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 24px; background: var(--bg); color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    h1 { font-size: 1.4rem; margin: 0 0 4px; }
+    .sub { color: var(--muted); font-size: .85rem; margin-bottom: 20px; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px; margin-bottom: 16px;
+    }
+    .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
+    .col { flex: 1 1 320px; }
+    label { display: block; font-size: .75rem; color: var(--muted); margin-bottom: 4px; }
+    input {
+      width: 100%; padding: 8px 10px; border: 1px solid var(--border);
+      border-radius: 6px; font-size: .9rem;
+    }
+    button {
+      padding: 9px 16px; border: 1px solid var(--border); border-radius: 6px;
+      background: var(--text); color: #fff; font-size: .85rem; cursor: pointer;
+    }
+    button.secondary { background: var(--surface); color: var(--text); }
+    .stats { display: flex; gap: 12px; flex-wrap: wrap; }
+    .stat { flex: 1 1 120px; border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+    .stat .label { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .stat .value { font-size: 1.8rem; font-weight: 600; line-height: 1.2; }
+    table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
+    th { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+    td.id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .75rem; }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      font-size: .7rem; font-weight: 600; color: #fff; text-transform: uppercase;
+    }
+    .badge.pending { background: var(--pending); }
+    .badge.running { background: var(--running); }
+    .badge.failed { background: var(--failed); }
+    .badge.completed { background: var(--completed); }
+    .empty, .error { color: var(--muted); font-size: .85rem; padding: 12px 0; }
+    .error { color: var(--failed); }
+    dl { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; margin: 0; font-size: .85rem; }
+    dt { color: var(--muted); }
+    dd { margin: 0; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <h1>Job Queue Dashboard</h1>
+  <p class="sub">Status and job list refresh automatically every 2 seconds.</p>
+
+  <div id="message" hx-get="/jobqueue/dashboard/message" hx-trigger="load" hx-swap="innerHTML"></div>
+
+  <div class="card">
+    <div class="row">
+      <form class="col" hx-post="/jobqueue/dashboard/jobs/create"
+            hx-target="#jobs-table" hx-swap="innerHTML">
+        <div class="row">
+          <div class="col"><label for="job1">Job1</label>
+            <input id="job1" name="job1" value="{{.Defaults.Job1}}"></div>
+          <div class="col"><label for="job2">Job2</label>
+            <input id="job2" name="job2" value="{{.Defaults.Job2}}"></div>
+          <div class="col"><label for="job3">Job3</label>
+            <input id="job3" name="job3" value="{{.Defaults.Job3}}"></div>
+        </div>
+        <p><button type="submit">Create 3 Jobs</button></p>
+      </form>
+      <div>
+        <button hx-post="/jobqueue/dashboard/jobs/unstable"
+                hx-target="#jobs-table" hx-swap="innerHTML">Create Unstable Job</button>
+        <button class="secondary" hx-get="/jobqueue/dashboard/jobs"
+                hx-target="#jobs-table" hx-swap="innerHTML">Refresh</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div id="status-summary"
+         hx-get="/jobqueue/dashboard/status"
+         hx-trigger="load, every 2s"
+         hx-swap="innerHTML"></div>
+  </div>
+
+  <div class="row">
+    <div class="card col" style="flex: 2 1 520px;">
+      <div id="jobs-table"
+           hx-get="/jobqueue/dashboard/jobs"
+           hx-trigger="load, every 2s"
+           hx-swap="innerHTML"></div>
+    </div>
+
+    <div class="card col">
+      <label for="job-id-input">Find a job by id</label>
+      <div class="row">
+        <input id="job-id-input" name="id" placeholder="paste a job id…">
+        <button hx-get="/jobqueue/dashboard/jobs/search"
+                hx-include="#job-id-input"
+                hx-target="#job-detail" hx-swap="innerHTML">Find</button>
+      </div>
+      <div id="job-detail"><p class="empty">Select a job to see its details.</p></div>
+    </div>
+  </div>
+</body>
+</html>
+{{end}}
