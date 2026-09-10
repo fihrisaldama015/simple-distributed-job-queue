@@ -119,3 +119,120 @@ Panel or side section targeting `#job-detail`:
 3. Status summary and job list auto-refresh every 2 seconds via HTMX polling.
 
 # Good Luck Guys
+
+---
+
+# Implementation Notes
+
+## Running
+
+```bash
+export PATH="$HOME/.local/go/bin:$PATH"   # only if Go is not already on your PATH
+go run main.go
+```
+
+- GraphiQL: <http://localhost:58579/graphiql>
+- Dashboard: <http://localhost:58579/jobqueue/dashboard>
+
+VS Code users can still use the **Go-Debug** launch configuration. Stop the server with
+Ctrl-C: it drains in-flight jobs before exiting.
+
+## Tests
+
+```bash
+make test        # go test ./... -cover -race -count=1
+make unittest    # short mode, skips the 100-job load test
+```
+
+The race detector is not optional here — it is the automated proof behind the
+concurrency-safety requirements.
+
+> Coverage note: `delivery/graphql/mutation`, `.../query` and `.../resolver` report
+> 0.0% under plain `go test -cover`. They are exercised by
+> `delivery/graphql/graphql_test.go`, and `-cover` only counts statements executed by
+> tests *in the same package*. Measure them with
+> `go test ./delivery/... -coverpkg=./delivery/...`.
+
+## How it works
+
+A fixed pool of worker goroutines consumes job ids from a bounded buffered channel.
+`Enqueue` persists the job as `pending` and returns immediately — execution is
+asynchronous, so the mutation answers with `status: "pending"` and `attempts: 0`, and
+you poll `GetJobById` (or watch the dashboard) to see it progress.
+
+A worker claims a job by compare-and-swapping its status from `pending` to `running`
+inside the repository's write lock. Exactly one worker can win, which is what makes
+execution idempotent: the same job id delivered twice runs once. A failing attempt
+returns the job to `pending` and a timer re-dispatches it after an exponential backoff
+(200 ms, then 400 ms) until `MaxAttempts` is reached, after which the job becomes
+`failed` with the last error recorded. Handler panics are recovered and treated as
+failed attempts, so a bad task can never take the process down.
+
+The repository hands out copies rather than pointers into its map, so background
+workers and HTTP readers never share a mutable struct.
+
+### Configuration
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `JOBQUEUE_WORKERS` | 8 | worker goroutines |
+| `JOBQUEUE_QUEUE_SIZE` | 1024 | queue capacity before `Enqueue` reports backpressure |
+| `JOBQUEUE_MAX_ATTEMPTS` | 3 | attempts before a job is marked failed |
+| `JOBQUEUE_BASE_BACKOFF_MS` | 200 | delay before the second attempt |
+| `JOBQUEUE_MAX_BACKOFF_MS` | 2000 | backoff ceiling |
+| `JOBQUEUE_TASK_DURATION_MS` | 150 | simulated work per attempt |
+| `JOBQUEUE_UNSTABLE_FAILURES` | 2 | failures injected into `unstable-job` |
+| `JOBQUEUE_SHUTDOWN_GRACE_MS` | 10000 | shutdown budget for in-flight jobs |
+
+### Demonstrating the retry logic
+
+`SimulateUnstableJob` returns `status: "pending", attempts: 0` because the queue is
+asynchronous — the job has not run yet. Take the returned id and poll:
+
+```graphql
+query GetJobById { Job(id: "PASTE_ID") { id task status attempts } }
+```
+
+Within about a second it reads `status: "completed", attempts: 3` — two simulated
+failures, then a success. The dashboard shows the same thing live: click
+**Create Unstable Job** and watch the row climb `1/3 → 2/3 → 3/3`, or open its detail
+panel, which polls itself every 2 seconds.
+
+### Idempotency
+
+`Enqueue` accepts an optional `idempotencyKey`. Two calls with the same key return the
+same job and enqueue work once:
+
+```graphql
+mutation { Enqueue(task: "send-email", idempotencyKey: "order-42") { id status } }
+```
+
+The argument is optional, so every operation in `web/documentation.graphql` runs
+unchanged.
+
+### Deliberate changes to the skeleton
+
+- **The repository returns copies.** The original stored the caller's pointer and
+  handed that same pointer back to readers, so a worker mutating a job raced any
+  concurrent GraphQL query — a data race `go test -race` reports.
+- **The DataLoader is now built per request.** The original built one at startup with
+  an unbounded cache, which would have served permanently stale jobs: a completed job
+  would still report as `pending`.
+- **The GraphQL schema is embedded with `//go:embed`** instead of `go-bindata`, which
+  is unmaintained and not installed here — `make bind-static` failed, so the schema
+  could not be regenerated at all.
+- **The dashboard uses `html/template`**; the placeholder used `text/template`, which
+  does not escape user-supplied task names.
+- **The unused `logrus` logger was removed** in favour of the zap logger the project
+  already installs globally.
+- **htmx is vendored** at `web/static/htmx.min.js` rather than loaded from a CDN, so
+  the dashboard works without internet access.
+
+### Known limitations
+
+- State is in memory and does not survive a restart — by design, per the assignment.
+- On shutdown, in-flight jobs are allowed to finish but jobs still waiting in the queue
+  stay `pending`. Since the store dies with the process, draining them would only slow
+  shutdown down.
+- There is no dead-letter queue. Exhausted jobs remain visible as `failed` with the
+  last error recorded.
