@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Job Queue Dashboard</title>
+  <title>Simple Distributed Job Queue Simulation</title>
   <script src="/static/htmx.min.js"></script>
   <style>
     :root {
@@ -331,7 +331,25 @@
     .error { color: var(--failed); font-size: .8125rem; padding: var(--sp-2) 0; }
 
     .search-row { display: flex; gap: var(--sp-2); margin-bottom: var(--sp-4); }
-    .search-row input { flex: 1; }
+    .input-wrap { position: relative; flex: 1; }
+    .input-wrap input { width: 100%; padding-right: 28px; }
+    .input-clear {
+      position: absolute;
+      top: 50%;
+      right: var(--sp-2);
+      transform: translateY(-50%);
+      width: 20px;
+      height: 20px;
+      border: none;
+      background: none;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1;
+      cursor: pointer;
+      padding: 0;
+    }
+    .input-clear:hover { color: var(--ink); }
+    .input-clear[hidden] { display: none; }
 
     dl { margin: 0; font-size: .8125rem; }
     dl > div {
@@ -366,7 +384,7 @@
 <body>
   <div class="stack">
     <header>
-      <h1>Job Queue</h1>
+      <h1>Simple Distributed Job Queue Simulation</h1>
       <p class="subhead">This simulates a background job queue: create jobs, watch failures retry with backoff, and see how a fixed pool of workers handles a burst of work.</p>
       <!-- Required entry-point fragment (README: "initial HTMX fragment entry
            point"). It has no useful content to show the user, so it stays
@@ -445,7 +463,11 @@
       <div class="card detail-panel">
         <h2>Job detail</h2>
         <div class="search-row">
-          <input id="job-id-input" name="id" type="text" placeholder="Paste a job ID…">
+          <div class="input-wrap">
+            <input id="job-id-input" name="id" type="text" placeholder="Paste a job ID…">
+            <button type="button" class="input-clear" id="job-id-clear"
+                    aria-label="Clear job ID" hidden>&times;</button>
+          </div>
           <button class="btn btn-secondary" hx-get="/jobqueue/dashboard/jobs/search"
                   hx-include="#job-id-input"
                   hx-target="#job-detail" hx-swap="innerHTML">Find</button>
@@ -503,6 +525,25 @@
           pending = null;
         }
       });
+    })();
+
+    // Show the job-ID search box's clear button only while it has text, so it
+    // never sits there doing nothing over an empty field.
+    (function () {
+      var input = document.getElementById('job-id-input');
+      var clearBtn = document.getElementById('job-id-clear');
+
+      function sync() {
+        clearBtn.hidden = input.value.length === 0;
+      }
+
+      input.addEventListener('input', sync);
+      clearBtn.addEventListener('click', function () {
+        input.value = '';
+        sync();
+        input.focus();
+      });
+      sync();
     })();
   </script>
 </body>
