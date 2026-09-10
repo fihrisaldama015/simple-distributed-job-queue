@@ -15,7 +15,7 @@
 {{if .}}
 <table>
   <thead>
-    <tr><th>ID</th><th>Task</th><th>Status</th><th>Attempts</th><th></th></tr>
+    <tr><th>ID</th><th>Task</th><th>Status</th><th>Attempts</th><th>Created</th><th></th></tr>
   </thead>
   <tbody>
   {{range .}}
@@ -27,6 +27,7 @@
         {{if .LastError}}<div class="retry-note">{{.LastError}}</div>{{end}}
       </td>
       <td class="attempts">{{.Attempts}}/{{.MaxAttempts}}</td>
+      <td class="timestamp">{{.CreatedAt.Format "2006-01-02 15:04:05 -07:00"}}</td>
       <td>
         <button class="btn btn-secondary"
                 hx-get="/jobqueue/dashboard/jobs/{{.ID}}"
@@ -48,8 +49,8 @@
     <div><dt>Task</dt><dd>{{.Task}}</dd></div>
     <div><dt>Status</dt><dd><span class="badge {{.Status}}"><span class="dot"></span>{{.Status}}</span></dd></div>
     <div><dt>Attempts</dt><dd>{{.Attempts}} of {{.MaxAttempts}}</dd></div>
-    <div><dt>Created</dt><dd>{{.CreatedAt.Format "15:04:05"}}</dd></div>
-    <div><dt>Updated</dt><dd>{{.UpdatedAt.Format "15:04:05"}}</dd></div>
+    <div><dt>Created</dt><dd>{{.CreatedAt.Format "2006-01-02 15:04:05 -07:00"}}</dd></div>
+    <div><dt>Updated</dt><dd>{{.UpdatedAt.Format "2006-01-02 15:04:05 -07:00"}}</dd></div>
     {{if .LastError}}
       {{if eq .Status "completed"}}
         <div><dt>Last error</dt><dd class="error">{{.LastError}} (before it succeeded)</dd></div>

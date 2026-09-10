@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -263,6 +264,28 @@ func TestJobsTableShowsLastErrorForARetryingJob(t *testing.T) {
 	}
 }
 
+// The jobs table must show when each job was created, with a full date - not just a
+// clock time, which is ambiguous the moment a job is more than a few hours old.
+func TestJobsTableShowsCreatedDate(t *testing.T) {
+	handler, svc := newTestHandler(t)
+	if _, err := svc.Enqueue(context.Background(), "send-email", ""); err != nil {
+		t.Fatalf("Enqueue() error = %v", err)
+	}
+
+	c, rec := get(t, "/jobqueue/dashboard/jobs")
+	if err := handler.JobsTable(c); err != nil {
+		t.Fatalf("JobsTable() error = %v", err)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "Created") {
+		t.Fatalf("table header is missing a Created column: %q", body)
+	}
+	if !timestampRE.MatchString(body) {
+		t.Fatalf("table row has no full date (YYYY-MM-DD): %q", body)
+	}
+}
+
 func TestJobsTableEmptyState(t *testing.T) {
 	handler, _ := newTestHandler(t)
 	c, rec := get(t, "/jobqueue/dashboard/jobs")
@@ -299,7 +322,21 @@ func TestJobDetailByPathParam(t *testing.T) {
 	if !strings.Contains(body, "Created") || !strings.Contains(body, "Updated") {
 		t.Fatalf("detail fragment is missing timestamps: %q", body)
 	}
+	// Time alone is ambiguous once a job is more than a few hours old - the date
+	// must be visible too, not just the clock time.
+	if n := len(timestampRE.FindAllString(body, -1)); n < 2 {
+		t.Fatalf("detail fragment has %d full dates (YYYY-MM-DD), want at least 2 (created and updated): %q", n, body)
+	}
 }
+
+// timestampRE matches a full rendered timestamp - "2006-01-02 15:04:05 -07:00" - so
+// tests can confirm the date and the UTC offset are both present, not just a bare
+// clock time that would be ambiguous once a job is more than a few hours old.
+//
+// html/template HTML-escapes "+" as "&#43;" in text nodes (it still renders as a
+// literal "+" in the browser), so a positive offset appears as "&#43;07:00" in the
+// raw response body this test inspects - accept either form.
+var timestampRE = regexp.MustCompile(`\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} (?:[+-]|&#43;)\d{2}:\d{2}`)
 
 // A job that failed before eventually succeeding must still say so in its detail
 // view - otherwise it looks identical to one that never failed at all.
