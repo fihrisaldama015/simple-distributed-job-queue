@@ -39,7 +39,7 @@ func DefaultQueueConfig() QueueConfig {
 		MaxAttempts:      3,
 		BaseBackoff:      200 * time.Millisecond,
 		MaxBackoff:       2 * time.Second,
-		TaskDuration:     150 * time.Millisecond,
+		TaskDuration:     1500 * time.Millisecond,
 		UnstableFailures: 2,
 		ShutdownGrace:    10 * time.Second,
 	}

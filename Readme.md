@@ -181,7 +181,7 @@ workers and HTTP readers never share a mutable struct.
 | `JOBQUEUE_MAX_ATTEMPTS` | 3 | attempts before a job is marked failed |
 | `JOBQUEUE_BASE_BACKOFF_MS` | 200 | delay before the second attempt |
 | `JOBQUEUE_MAX_BACKOFF_MS` | 2000 | backoff ceiling |
-| `JOBQUEUE_TASK_DURATION_MS` | 150 | simulated work per attempt |
+| `JOBQUEUE_TASK_DURATION_MS` | 1500 | simulated work per attempt — long enough to watch a job sit `running` across a couple of 2s polls; set it to `150` (or lower) for a fast manual loop |
 | `JOBQUEUE_UNSTABLE_FAILURES` | 2 | failures injected into `unstable-job` |
 | `JOBQUEUE_SHUTDOWN_GRACE_MS` | 10000 | shutdown budget for in-flight jobs |
 
@@ -194,7 +194,7 @@ asynchronous — the job has not run yet. Take the returned id and poll:
 query GetJobById { Job(id: "PASTE_ID") { id task status attempts } }
 ```
 
-Within about a second it reads `status: "completed", attempts: 3` — two simulated
+Within about two seconds it reads `status: "completed", attempts: 3` — two simulated
 failures, then a success. The dashboard shows the same thing live: click
 **Create Unstable Job** and watch the row climb `1/3 → 2/3 → 3/3`, or open its detail
 panel, which polls itself every 2 seconds.
