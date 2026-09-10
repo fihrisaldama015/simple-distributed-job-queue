@@ -12,13 +12,13 @@
 {{end}}
 
 {{define "jobs_table"}}
-{{if .}}
+{{if .Jobs}}
 <table>
   <thead>
     <tr><th>ID</th><th>Task</th><th>Status</th><th>Attempts</th><th>Created</th><th></th></tr>
   </thead>
   <tbody>
-  {{range .}}
+  {{range .Jobs}}
     <tr>
       <td class="id">{{.ID}}</td>
       <td>{{.Task}}</td>
@@ -37,6 +37,8 @@
   {{end}}
   </tbody>
 </table>
+{{else if .FilterActive}}
+<p class="empty">No jobs match this filter.</p>
 {{else}}
 <p class="empty">No jobs yet. Create some above.</p>
 {{end}}

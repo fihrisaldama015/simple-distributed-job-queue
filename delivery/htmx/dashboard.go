@@ -128,12 +128,34 @@ func (h *DashboardHandler) StatusSummary(c echo.Context) error {
 
 // JobsTable renders the job list. Polled every 2 seconds.
 func (h *DashboardHandler) JobsTable(c echo.Context) error {
-	jobs, err := h.jobService.GetAllJobs(c.Request().Context())
+	// FormValue (not QueryParam) so this reads the filter bar whether it arrived on
+	// a GET poll's query string or, via hx-include, on a POST action's form body -
+	// Create/Unstable/Load Test all end by re-rendering this same table and should
+	// respect whatever filter was active when the button was clicked.
+	opts := _interface.JobListOptions{
+		Status:      entity.Status(c.FormValue("status")),
+		TaskQuery:   c.FormValue("task"),
+		NewestFirst: c.FormValue("sort") == "newest",
+	}
+
+	jobs, err := h.jobService.ListJobs(c.Request().Context(), opts)
 	if err != nil {
 		h.log.Error("dashboard.jobs_failed", zap.Error(err))
 		return h.renderError(c, "Could not load the job list.")
 	}
-	return h.render(c, "jobs_table", jobs)
+
+	return h.render(c, "jobs_table", jobsTableView{
+		Jobs:         jobs,
+		FilterActive: opts.Status != "" || strings.TrimSpace(opts.TaskQuery) != "",
+	})
+}
+
+// jobsTableView is what the "jobs_table" template renders. FilterActive lets the
+// empty state tell "nothing matches your filter" apart from "the queue is genuinely
+// empty" - two very different situations that look identical from an empty []*Job.
+type jobsTableView struct {
+	Jobs         []*entity.Job
+	FilterActive bool
 }
 
 // JobDetail renders one job, addressed by path parameter.

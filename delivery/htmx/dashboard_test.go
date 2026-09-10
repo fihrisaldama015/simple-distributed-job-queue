@@ -298,6 +298,100 @@ func TestJobsTableEmptyState(t *testing.T) {
 	}
 }
 
+func newFilterableJobs(t *testing.T) (*DashboardHandler, _interface.JobService) {
+	t.Helper()
+	handler, _ := newTestHandler(t)
+	repo := inmemrepo.NewJobRepository().SetInMemConnection(make(map[string]*entity.Job)).Build()
+	svc := service.NewJobService().SetJobRepository(repo).SetJobDispatcher(recordingDispatcher{}).SetMaxAttempts(3).Build()
+	handler = NewDashboardHandler(svc, handler.tmpl, handler.defaults, zap.NewNop())
+
+	for _, job := range []*entity.Job{
+		{ID: "job-1", Task: "send-email", Status: entity.StatusPending},
+		{ID: "job-2", Task: "unstable-job", Status: entity.StatusRunning},
+		{ID: "job-3", Task: "load-test", Status: entity.StatusCompleted},
+	} {
+		if err := repo.Save(context.Background(), job); err != nil {
+			t.Fatalf("Save() error = %v", err)
+		}
+	}
+	return handler, svc
+}
+
+func TestJobsTableFiltersByStatusQueryParam(t *testing.T) {
+	handler, _ := newFilterableJobs(t)
+	c, rec := get(t, "/jobqueue/dashboard/jobs?status=running")
+
+	if err := handler.JobsTable(c); err != nil {
+		t.Fatalf("JobsTable() error = %v", err)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "unstable-job") {
+		t.Fatalf("filtered table is missing the running job: %q", body)
+	}
+	if strings.Contains(body, "send-email") || strings.Contains(body, "load-test") {
+		t.Fatalf("filtered table still shows non-matching jobs: %q", body)
+	}
+}
+
+func TestJobsTableSearchesByTaskQueryParam(t *testing.T) {
+	handler, _ := newFilterableJobs(t)
+	c, rec := get(t, "/jobqueue/dashboard/jobs?task=LOAD")
+
+	if err := handler.JobsTable(c); err != nil {
+		t.Fatalf("JobsTable() error = %v", err)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "load-test") {
+		t.Fatalf("search result is missing the matching job: %q", body)
+	}
+	if strings.Contains(body, "send-email") || strings.Contains(body, "unstable-job") {
+		t.Fatalf("search result still shows non-matching jobs: %q", body)
+	}
+}
+
+func TestJobsTableEmptyStateDistinguishesFilteredFromGenuinelyEmpty(t *testing.T) {
+	handler, _ := newFilterableJobs(t)
+	c, rec := get(t, "/jobqueue/dashboard/jobs?task=nothing-matches-this")
+
+	if err := handler.JobsTable(c); err != nil {
+		t.Fatalf("JobsTable() error = %v", err)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "No jobs yet") {
+		t.Fatalf("a filtered empty result must not claim the queue itself is empty: %q", body)
+	}
+	if !strings.Contains(body, "No jobs match") {
+		t.Fatalf("filtered empty state should say nothing matched: %q", body)
+	}
+}
+
+func TestJobsTableSortsNewestFirstQueryParam(t *testing.T) {
+	handler, svc := newTestHandler(t)
+	first, err := svc.Enqueue(context.Background(), "first", "")
+	if err != nil {
+		t.Fatalf("Enqueue() error = %v", err)
+	}
+	second, err := svc.Enqueue(context.Background(), "second", "")
+	if err != nil {
+		t.Fatalf("Enqueue() error = %v", err)
+	}
+
+	c, rec := get(t, "/jobqueue/dashboard/jobs?sort=newest")
+	if err := handler.JobsTable(c); err != nil {
+		t.Fatalf("JobsTable() error = %v", err)
+	}
+
+	body := rec.Body.String()
+	firstPos := strings.Index(body, first.ID)
+	secondPos := strings.Index(body, second.ID)
+	if firstPos == -1 || secondPos == -1 {
+		t.Fatalf("both jobs must appear in the table: %q", body)
+	}
+	if secondPos > firstPos {
+		t.Fatalf("sort=newest should list %s before %s, got the opposite order", second.ID, first.ID)
+	}
+}
+
 func TestJobDetailByPathParam(t *testing.T) {
 	handler, svc := newTestHandler(t)
 	job, err := svc.Enqueue(context.Background(), "send-email", "")
