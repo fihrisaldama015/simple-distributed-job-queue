@@ -205,14 +205,21 @@
       .tooltip-bubble { transition: opacity .12s ease, transform .12s ease; }
     }
 
-    /* Stats: one strip with internal dividers, not four repeated shadow cards. */
+    /* Stats: four self-contained cards, each carrying its own colored top
+       edge - the same color that marks that status everywhere else on the
+       page (badges, table rows), so recognizing a card doesn't require
+       reading its label. */
     .stats {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
+      gap: var(--sp-4);
     }
     .stat {
-      padding: var(--sp-2) var(--sp-5);
-      border-left: 3px solid var(--stat-color, var(--border));
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-top: 3px solid var(--stat-color, var(--border));
+      border-radius: var(--radius);
+      padding: var(--sp-4) var(--sp-5);
     }
     .stat-pending   { --stat-color: var(--pending); }
     .stat-running   { --stat-color: var(--running); }
@@ -227,7 +234,6 @@
     }
     @media (max-width: 640px) {
       .stats { grid-template-columns: repeat(2, 1fr); }
-      .stat { border-top: 3px solid var(--stat-color, var(--border)); border-left: none; }
     }
 
     /* The layout fix: two columns that both start at the same top edge. The
@@ -399,12 +405,10 @@
       </div>
     </div>
 
-    <div class="card">
-      <div id="status-summary"
-           hx-get="/jobqueue/dashboard/status"
-           hx-trigger="load, every 2s"
-           hx-swap="innerHTML"></div>
-    </div>
+    <div id="status-summary"
+         hx-get="/jobqueue/dashboard/status"
+         hx-trigger="load, every 2s"
+         hx-swap="innerHTML"></div>
 
     <div class="results">
       <div class="card jobs-panel">
