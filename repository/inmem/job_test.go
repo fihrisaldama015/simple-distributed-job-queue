@@ -351,3 +351,93 @@ func TestCountByStatus(t *testing.T) {
 		t.Fatalf("Total() = %d, want %d", got.Total(), len(statuses))
 	}
 }
+
+// TestConcurrentAccessIsRaceFree exercises every method simultaneously. Run with
+// -race, this is the proof that no caller ever shares memory with the store.
+func TestConcurrentAccessIsRaceFree(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestRepository()
+	now := time.Now()
+
+	const jobs = 50
+	ids := make([]string, 0, jobs)
+	for i := 0; i < jobs; i++ {
+		id := fmt.Sprintf("job-%02d", i)
+		ids = append(ids, id)
+		if err := repo.Save(ctx, newJob(id, "task", entity.StatusPending, now.Add(time.Duration(i)*time.Millisecond))); err != nil {
+			t.Fatalf("Save() error = %v", err)
+		}
+	}
+
+	var wg sync.WaitGroup
+	const rounds = 20
+
+	// Writers: transition jobs through the state machine.
+	for _, id := range ids {
+		wg.Add(1)
+		go func(id string) {
+			defer wg.Done()
+			for r := 0; r < rounds; r++ {
+				_, _ = repo.Update(ctx, id, func(j *entity.Job) error {
+					j.Attempts++
+					j.Status = entity.StatusRunning
+					j.UpdatedAt = time.Now()
+					return nil
+				})
+				_, _ = repo.Update(ctx, id, func(j *entity.Job) error {
+					j.Status = entity.StatusCompleted
+					return nil
+				})
+			}
+		}(id)
+	}
+
+	// Readers: everything the dashboard and GraphQL layer do.
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			for r := 0; r < rounds; r++ {
+				if _, err := repo.FindAll(ctx); err != nil {
+					t.Errorf("FindAll() error = %v", err)
+				}
+				if _, err := repo.CountByStatus(ctx); err != nil {
+					t.Errorf("CountByStatus() error = %v", err)
+				}
+				if _, err := repo.FindByIDs(ctx, ids); err != nil {
+					t.Errorf("FindByIDs() error = %v", err)
+				}
+				if job, err := repo.FindByID(ctx, ids[i%len(ids)]); err == nil {
+					job.Status = entity.StatusFailed // mutating our copy must be harmless
+				}
+			}
+		}(i)
+	}
+
+	// Idempotent creators racing on a shared key.
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, _, _ = repo.SaveIfAbsent(ctx, "shared-key",
+				newJob(fmt.Sprintf("extra-%02d", i), "task", entity.StatusPending, now))
+		}(i)
+	}
+
+	wg.Wait()
+
+	counts, err := repo.CountByStatus(ctx)
+	if err != nil {
+		t.Fatalf("CountByStatus() error = %v", err)
+	}
+	all, err := repo.FindAll(ctx)
+	if err != nil {
+		t.Fatalf("FindAll() error = %v", err)
+	}
+	if counts.Total() != int32(len(all)) {
+		t.Fatalf("counts total %d but store holds %d jobs — accounting drifted", counts.Total(), len(all))
+	}
+	if len(all) != jobs+1 {
+		t.Fatalf("store holds %d jobs, want %d (%d seeded + 1 from the shared key)", len(all), jobs+1, jobs)
+	}
+}
