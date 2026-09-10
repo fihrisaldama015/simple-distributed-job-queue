@@ -22,7 +22,10 @@
     <tr>
       <td class="id">{{.ID}}</td>
       <td>{{.Task}}</td>
-      <td><span class="badge {{.Status}}"><span class="dot"></span>{{.Status}}</span></td>
+      <td>
+        <span class="badge {{.Status}}"><span class="dot"></span>{{.Status}}</span>
+        {{if .LastError}}<div class="retry-note">{{.LastError}}</div>{{end}}
+      </td>
       <td class="attempts">{{.Attempts}}/{{.MaxAttempts}}</td>
       <td>
         <button class="btn btn-secondary"

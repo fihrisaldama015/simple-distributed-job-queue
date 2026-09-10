@@ -307,6 +307,19 @@
     .badge.completed { background: rgba(5, 150, 105, .12); color: var(--completed); }
     .badge.completed .dot { background: var(--completed); }
 
+    /* A pending or running job whose last attempt failed looks identical to a
+       fresh one unless the failure is shown right under the badge - this is
+       what tells "attempt 2, running" apart from "just started running". */
+    .retry-note {
+      margin-top: var(--sp-1);
+      max-width: 260px;
+      color: var(--muted);
+      font-size: .75rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     .empty { color: var(--muted); font-size: .8125rem; padding: var(--sp-4) 0; }
     .error { color: var(--failed); font-size: .8125rem; padding: var(--sp-2) 0; }
 

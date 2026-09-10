@@ -231,6 +231,38 @@ func TestStatusSummaryRendersCounts(t *testing.T) {
 	}
 }
 
+// A job sitting in "pending" (waiting to retry) or "running" (a second attempt) looks
+// identical to a fresh, never-tried job unless its last failure is shown alongside the
+// status - otherwise a retry reads as "just running", not "failed once, trying again".
+func TestJobsTableShowsLastErrorForARetryingJob(t *testing.T) {
+	handler, _ := newTestHandler(t)
+
+	repo := inmemrepo.NewJobRepository().SetInMemConnection(make(map[string]*entity.Job)).Build()
+	handler = NewDashboardHandler(
+		service.NewJobService().SetJobRepository(repo).SetJobDispatcher(recordingDispatcher{}).SetMaxAttempts(3).Build(),
+		handler.tmpl, handler.defaults, zap.NewNop(),
+	)
+	if err := repo.Save(context.Background(), &entity.Job{
+		ID:          "job-1",
+		Task:        "unstable-job",
+		Status:      entity.StatusPending,
+		Attempts:    1,
+		MaxAttempts: 3,
+		LastError:   "unstable-job: simulated failure on attempt 1 of 3",
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	c, rec := get(t, "/jobqueue/dashboard/jobs")
+	if err := handler.JobsTable(c); err != nil {
+		t.Fatalf("JobsTable() error = %v", err)
+	}
+
+	if !strings.Contains(rec.Body.String(), "simulated failure on attempt 1 of 3") {
+		t.Fatalf("table does not show the retry reason: %q", rec.Body.String())
+	}
+}
+
 func TestJobsTableEmptyState(t *testing.T) {
 	handler, _ := newTestHandler(t)
 	c, rec := get(t, "/jobqueue/dashboard/jobs")
