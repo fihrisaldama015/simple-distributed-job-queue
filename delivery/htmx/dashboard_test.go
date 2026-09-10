@@ -160,6 +160,39 @@ func TestCreateUnstableJobUsesTheReservedTaskName(t *testing.T) {
 	}
 }
 
+// The load test button is the only place in the dashboard that visually proves the
+// "handles 50-100 concurrent jobs" criterion: 3 jobs finish faster than one 2s poll
+// tick, so the summary card never shows anything but 0 -> 3. 50 jobs against an 8-slot
+// pool spends real time queued as pending, which is the point.
+func TestLoadTestEnqueuesFiftyJobs(t *testing.T) {
+	handler, svc := newTestHandler(t)
+	c, rec := postForm(t, "/jobqueue/dashboard/jobs/loadtest", url.Values{})
+
+	if err := handler.LoadTest(c); err != nil {
+		t.Fatalf("LoadTest() error = %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+
+	jobs, err := svc.GetAllJobs(context.Background())
+	if err != nil {
+		t.Fatalf("GetAllJobs() error = %v", err)
+	}
+	if len(jobs) != loadTestJobCount {
+		t.Fatalf("created %d jobs, want %d", len(jobs), loadTestJobCount)
+	}
+	for _, job := range jobs {
+		if job.Task != "load-test" {
+			t.Fatalf("job.Task = %q, want %q", job.Task, "load-test")
+		}
+	}
+
+	if !strings.Contains(rec.Body.String(), "<table") {
+		t.Fatalf("response is not the jobs table fragment: %q", rec.Body.String())
+	}
+}
+
 func TestStatusSummaryRendersCounts(t *testing.T) {
 	handler, svc := newTestHandler(t)
 	if _, err := svc.Enqueue(context.Background(), "send-email", ""); err != nil {

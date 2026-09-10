@@ -17,6 +17,18 @@ import (
 	"go.uber.org/zap"
 )
 
+// loadTestJobCount is how many jobs the "Load Test" button fires at once. It sits
+// inside the README's stated target ("50-100 concurrent jobs") and, against the
+// default 8-worker pool, is large enough that most of them sit visibly pending while
+// they wait their turn — the one place in the dashboard that shows the bounded worker
+// pool actually bounding something.
+const loadTestJobCount = 50
+
+// loadTestTaskName is deliberately not registered with a specific handler: it falls
+// through to the registry's default handler, the same simulated work every other
+// plain job runs.
+const loadTestTaskName = "load-test"
+
 // DashboardHandler serves the dashboard page and its HTMX fragments.
 type DashboardHandler struct {
 	jobService _interface.JobService
@@ -75,6 +87,20 @@ func (h *DashboardHandler) CreateUnstableJob(c echo.Context) error {
 	if _, err := h.jobService.Enqueue(c.Request().Context(), constant.TaskUnstableJob, ""); err != nil {
 		h.log.Error("dashboard.create_unstable_failed", zap.Error(err))
 		return h.renderError(c, "Could not create the unstable job: "+err.Error())
+	}
+	return h.JobsTable(c)
+}
+
+// LoadTest fires loadTestJobCount jobs at once. It exists to make the bounded worker
+// pool visible: with more jobs than workers, some sit pending until a slot frees up,
+// which the 3-job "Create 3 Jobs" button finishes too fast to ever show.
+func (h *DashboardHandler) LoadTest(c echo.Context) error {
+	ctx := c.Request().Context()
+	for i := 0; i < loadTestJobCount; i++ {
+		if _, err := h.jobService.Enqueue(ctx, loadTestTaskName, ""); err != nil {
+			h.log.Error("dashboard.load_test_failed", zap.Int("enqueued", i), zap.Error(err))
+			return h.renderError(c, "Could not create the load test jobs: "+err.Error())
+		}
 	}
 	return h.JobsTable(c)
 }

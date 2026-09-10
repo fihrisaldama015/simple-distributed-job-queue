@@ -120,6 +120,7 @@ func main() {
 	e.Echo.GET("/jobqueue/dashboard/message", dashboard.Message)
 	e.Echo.POST("/jobqueue/dashboard/jobs/create", dashboard.CreateJobs)
 	e.Echo.POST("/jobqueue/dashboard/jobs/unstable", dashboard.CreateUnstableJob)
+	e.Echo.POST("/jobqueue/dashboard/jobs/loadtest", dashboard.LoadTest)
 	e.Echo.GET("/jobqueue/dashboard/status", dashboard.StatusSummary)
 	e.Echo.GET("/jobqueue/dashboard/jobs", dashboard.JobsTable)
 	e.Echo.GET("/jobqueue/dashboard/jobs/search", dashboard.JobSearch)
