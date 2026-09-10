@@ -30,7 +30,7 @@ func (q JobResolver) Task() string {
 
 // Status ....
 func (q JobResolver) Status() string {
-	return q.Data.Status
+	return string(q.Data.Status)
 }
 
 // Attempts ....
