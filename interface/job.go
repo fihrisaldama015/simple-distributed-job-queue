@@ -37,3 +37,15 @@ type JobRepository interface {
 	// CountByStatus aggregates every job into the four GraphQL status buckets.
 	CountByStatus(ctx context.Context) (entity.JobStatus, error)
 }
+
+// TaskHandler executes one attempt of a job. It receives a copy of the job, so
+// reading job.Attempts is race-free and mutating the copy is harmless. Returning a
+// non-nil error marks the attempt as failed; a panic is recovered by the pool and
+// treated identically.
+type TaskHandler func(ctx context.Context, job entity.Job) error
+
+// TaskRegistry resolves a task name to its handler. Implementations must never
+// return nil: an unknown task name resolves to a default handler.
+type TaskRegistry interface {
+	Handler(task string) TaskHandler
+}
