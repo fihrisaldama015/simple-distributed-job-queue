@@ -151,7 +151,11 @@ func (p *Pool) process(ctx context.Context, workerID int, jobID string) {
 
 	switch {
 	case runErr == nil:
-		p.settle(ctx, job, entity.StatusCompleted, "")
+		// job.LastError already holds whatever the previous attempt failed with
+		// (or "" if this succeeded on the first try) - keep it rather than wiping
+		// it, so a job that failed twice before succeeding still says so instead
+		// of looking identical to one that never failed at all.
+		p.settle(ctx, job, entity.StatusCompleted, job.LastError)
 		p.log.Info("job.completed",
 			zap.String("job_id", job.ID), zap.String("task", job.Task),
 			zap.Int32("attempt", job.Attempts), zap.Int64("duration_ms", elapsed.Milliseconds()))

@@ -150,6 +150,13 @@ func TestPoolUnstableJobSucceedsOnThirdAttempt(t *testing.T) {
 	if job.Attempts != 3 {
 		t.Fatalf("Attempts = %d, want exactly 3", job.Attempts)
 	}
+
+	// Completing must not erase the story of how it got there: a job that failed
+	// twice before succeeding should still say so, not look identical to one that
+	// succeeded on the first try.
+	if !strings.Contains(job.LastError, "attempt 2 of 3") {
+		t.Fatalf("LastError = %q, want it to still name the last failure before success", job.LastError)
+	}
 }
 
 // A panicking handler must not take the process down.
