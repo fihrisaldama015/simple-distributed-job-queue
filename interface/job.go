@@ -49,3 +49,12 @@ type TaskHandler func(ctx context.Context, job entity.Job) error
 type TaskRegistry interface {
 	Handler(task string) TaskHandler
 }
+
+// JobDispatcher hands a job id to the execution layer. It is implemented by
+// *worker.Pool; a broker-backed implementation could replace it without the service
+// changing at all.
+type JobDispatcher interface {
+	// Dispatch never blocks. It returns entity.ErrQueueFull when no slot is free and
+	// entity.ErrQueueClosed once shutdown has begun.
+	Dispatch(ctx context.Context, jobID string) error
+}
