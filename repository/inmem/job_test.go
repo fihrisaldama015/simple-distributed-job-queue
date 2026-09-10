@@ -3,6 +3,7 @@ package inmemrepo
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -237,5 +238,116 @@ func TestUpdateIsAtomicUnderConcurrency(t *testing.T) {
 	}
 	if stored.Attempts != increments {
 		t.Fatalf("Attempts = %d, want %d — updates were lost", stored.Attempts, increments)
+	}
+}
+
+func TestSaveIfAbsentCreatesThenReturnsExisting(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestRepository()
+
+	first, created, err := repo.SaveIfAbsent(ctx, "key-1", newJob("job-1", "send-email", entity.StatusPending, time.Now()))
+	if err != nil {
+		t.Fatalf("SaveIfAbsent() error = %v", err)
+	}
+	if !created {
+		t.Fatal("SaveIfAbsent() created = false on first call, want true")
+	}
+
+	second, created, err := repo.SaveIfAbsent(ctx, "key-1", newJob("job-2", "send-email", entity.StatusPending, time.Now()))
+	if err != nil {
+		t.Fatalf("SaveIfAbsent() error = %v", err)
+	}
+	if created {
+		t.Fatal("SaveIfAbsent() created = true on second call, want false")
+	}
+	if second.ID != first.ID {
+		t.Fatalf("second call returned id %q, want the original %q", second.ID, first.ID)
+	}
+
+	all, err := repo.FindAll(ctx)
+	if err != nil {
+		t.Fatalf("FindAll() error = %v", err)
+	}
+	if len(all) != 1 {
+		t.Fatalf("store holds %d jobs, want 1", len(all))
+	}
+}
+
+func TestSaveIfAbsentRejectsEmptyKey(t *testing.T) {
+	_, _, err := newTestRepository().SaveIfAbsent(context.Background(), "",
+		newJob("job-1", "task", entity.StatusPending, time.Now()))
+	if !errors.Is(err, entity.ErrInvalidIdempotencyKey) {
+		t.Fatalf("SaveIfAbsent() error = %v, want ErrInvalidIdempotencyKey", err)
+	}
+}
+
+// The heart of the idempotency guarantee: a stampede on one key creates one job.
+func TestSaveIfAbsentConcurrentSameKeyCreatesOnce(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestRepository()
+
+	const callers = 100
+	var (
+		wg      sync.WaitGroup
+		mu      sync.Mutex
+		creates int
+		ids     = make(map[string]struct{})
+	)
+
+	wg.Add(callers)
+	for i := 0; i < callers; i++ {
+		go func(i int) {
+			defer wg.Done()
+			job := newJob(fmt.Sprintf("job-%d", i), "send-email", entity.StatusPending, time.Now())
+			stored, created, err := repo.SaveIfAbsent(ctx, "same-key", job)
+			if err != nil {
+				t.Errorf("SaveIfAbsent() error = %v", err)
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if created {
+				creates++
+			}
+			ids[stored.ID] = struct{}{}
+		}(i)
+	}
+	wg.Wait()
+
+	if creates != 1 {
+		t.Fatalf("created %d jobs for one key, want exactly 1", creates)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("callers saw %d distinct job ids, want 1", len(ids))
+	}
+}
+
+func TestCountByStatus(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestRepository()
+	now := time.Now()
+
+	statuses := []entity.Status{
+		entity.StatusPending,
+		entity.StatusRunning, entity.StatusRunning,
+		entity.StatusFailed,
+		entity.StatusCompleted, entity.StatusCompleted, entity.StatusCompleted,
+	}
+	for i, status := range statuses {
+		if err := repo.Save(ctx, newJob(fmt.Sprintf("job-%d", i), "task", status, now)); err != nil {
+			t.Fatalf("Save() error = %v", err)
+		}
+	}
+
+	got, err := repo.CountByStatus(ctx)
+	if err != nil {
+		t.Fatalf("CountByStatus() error = %v", err)
+	}
+	want := entity.JobStatus{Pending: 1, Running: 2, Failed: 1, Completed: 3}
+	if got != want {
+		t.Fatalf("CountByStatus() = %+v, want %+v", got, want)
+	}
+	if got.Total() != int32(len(statuses)) {
+		t.Fatalf("Total() = %d, want %d", got.Total(), len(statuses))
 	}
 }

@@ -12,6 +12,12 @@ type JobService interface {
 
 type JobRepository interface {
 	Save(ctx context.Context, job *entity.Job) error
+
+	// SaveIfAbsent stores job under the idempotency key only if that key is unused.
+	// created reports whether this call performed the insert; stored is the job now
+	// associated with the key — the new one, or the pre-existing one.
+	SaveIfAbsent(ctx context.Context, key string, job *entity.Job) (stored *entity.Job, created bool, err error)
+
 	FindByID(ctx context.Context, id string) (*entity.Job, error)
 
 	// FindByIDs returns only the ids that exist; missing ids are simply absent from
@@ -27,4 +33,7 @@ type JobRepository interface {
 	//
 	// mutate MUST NOT call back into the repository: the write lock is held.
 	Update(ctx context.Context, id string, mutate func(*entity.Job) error) (*entity.Job, error)
+
+	// CountByStatus aggregates every job into the four GraphQL status buckets.
+	CountByStatus(ctx context.Context) (entity.JobStatus, error)
 }
