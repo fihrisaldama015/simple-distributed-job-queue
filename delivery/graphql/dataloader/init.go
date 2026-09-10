@@ -16,14 +16,32 @@ type GeneralDataloader struct {
 	jobRepo   _interface.JobRepository
 }
 
+// EchoMiddelware installs a fresh dataloader in the request context.
+//
+// A DataLoader's cache is scoped to one request by design: a process-lifetime cache
+// would keep serving the first version of every job it ever loaded, so a completed job
+// would still report as pending. Building one per request gives correct reads and
+// still batches every lookup within a single GraphQL operation.
 func (g GeneralDataloader) EchoMiddelware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		// add general dataloader into echo context
+		perRequest := GeneralDataloader{jobRepo: g.jobRepo}
+		perRequest.JobLoader = dataloader.NewBatchedLoader(
+			perRequest.JobBatchFunc,
+			dataloader.WithCache(dataloader.NewCache()),
+		)
+
 		oriReq := c.Request()
-		req := oriReq.WithContext(context.WithValue(oriReq.Context(), constant.DataloaderContextKey, g))
-		c.SetRequest(req)
+		ctx := context.WithValue(oriReq.Context(), constant.DataloaderContextKey, perRequest)
+		c.SetRequest(oriReq.WithContext(ctx))
 		return next(c)
 	}
+}
+
+// FromContext returns the request-scoped dataloader. ok is false outside an HTTP
+// request — in unit tests, for instance — and callers then fall back to the service.
+func FromContext(ctx context.Context) (GeneralDataloader, bool) {
+	loader, ok := ctx.Value(constant.DataloaderContextKey).(GeneralDataloader)
+	return loader, ok
 }
 
 // Initiator ...
