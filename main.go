@@ -125,6 +125,11 @@ func main() {
 	e.Echo.GET("/jobqueue/dashboard/jobs/search", dashboard.JobSearch)
 	e.Echo.GET("/jobqueue/dashboard/jobs/:id", dashboard.JobDetail)
 
+	// Vendored so the dashboard works without internet access. Kept outside any
+	// directory named "vendor" — .gitignore excludes those, which would silently drop
+	// the file from the repository and break the dashboard on a fresh clone.
+	e.Echo.File("/static/htmx.min.js", "./web/static/htmx.min.js")
+
 	go func() {
 		if err := e.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			zap.L().Fatal("server.start_failed", zap.Error(err))
