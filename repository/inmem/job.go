@@ -75,6 +75,28 @@ func (t *jobRepository) FindAll(ctx context.Context) ([]*entity.Job, error) {
 	return jobs, nil
 }
 
+// Update is the only mutation path for an existing job. Read-modify-write happens
+// entirely inside the write lock, so two workers can never interleave and lose an
+// update, and a mutate error leaves the store untouched.
+func (t *jobRepository) Update(ctx context.Context, id string, mutate func(*entity.Job) error) (*entity.Job, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	current, exists := t.inMemDb[id]
+	if !exists {
+		return nil, entity.ErrJobNotFound
+	}
+
+	draft := current.Clone()
+	if err := mutate(&draft); err != nil {
+		return nil, err
+	}
+	t.inMemDb[id] = &draft
+
+	out := draft.Clone()
+	return &out, nil
+}
+
 // Initiator ...
 type Initiator func(s *jobRepository) *jobRepository
 

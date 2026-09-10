@@ -3,6 +3,7 @@ package inmemrepo
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -145,5 +146,96 @@ func TestFindAllOnEmptyStoreReturnsEmptySlice(t *testing.T) {
 	}
 	if len(jobs) != 0 {
 		t.Fatalf("FindAll() returned %d jobs, want 0", len(jobs))
+	}
+}
+
+func TestUpdateAppliesMutationAtomically(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestRepository()
+	if err := repo.Save(ctx, newJob("job-1", "send-email", entity.StatusPending, time.Now())); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	updated, err := repo.Update(ctx, "job-1", func(j *entity.Job) error {
+		j.Status = entity.StatusRunning
+		j.Attempts++
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("Update() error = %v", err)
+	}
+	if updated.Status != entity.StatusRunning || updated.Attempts != 1 {
+		t.Fatalf("Update() returned %+v, want running/1", updated)
+	}
+
+	stored, err := repo.FindByID(ctx, "job-1")
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if stored.Status != entity.StatusRunning || stored.Attempts != 1 {
+		t.Fatalf("store holds %+v, want running/1", stored)
+	}
+}
+
+// A mutate error is the compare-and-swap rejection path: nothing may be written.
+func TestUpdateWritesNothingWhenMutateFails(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestRepository()
+	if err := repo.Save(ctx, newJob("job-1", "send-email", entity.StatusPending, time.Now())); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	_, err := repo.Update(ctx, "job-1", func(j *entity.Job) error {
+		j.Status = entity.StatusRunning // must be discarded
+		return entity.ErrNotClaimable
+	})
+	if !errors.Is(err, entity.ErrNotClaimable) {
+		t.Fatalf("Update() error = %v, want ErrNotClaimable", err)
+	}
+
+	stored, err := repo.FindByID(ctx, "job-1")
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if stored.Status != entity.StatusPending {
+		t.Fatalf("rejected update leaked into the store: %+v", stored)
+	}
+}
+
+func TestUpdateMissingJob(t *testing.T) {
+	_, err := newTestRepository().Update(context.Background(), "nope", func(*entity.Job) error { return nil })
+	if !errors.Is(err, entity.ErrJobNotFound) {
+		t.Fatalf("Update() error = %v, want ErrJobNotFound", err)
+	}
+}
+
+// Concurrent increments through Update must not lose writes.
+func TestUpdateIsAtomicUnderConcurrency(t *testing.T) {
+	ctx := context.Background()
+	repo := newTestRepository()
+	if err := repo.Save(ctx, newJob("job-1", "counter", entity.StatusPending, time.Now())); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	const increments = 200
+	var wg sync.WaitGroup
+	wg.Add(increments)
+	for i := 0; i < increments; i++ {
+		go func() {
+			defer wg.Done()
+			_, _ = repo.Update(ctx, "job-1", func(j *entity.Job) error {
+				j.Attempts++
+				return nil
+			})
+		}()
+	}
+	wg.Wait()
+
+	stored, err := repo.FindByID(ctx, "job-1")
+	if err != nil {
+		t.Fatalf("FindByID() error = %v", err)
+	}
+	if stored.Attempts != increments {
+		t.Fatalf("Attempts = %d, want %d — updates were lost", stored.Attempts, increments)
 	}
 }

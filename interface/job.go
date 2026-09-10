@@ -20,4 +20,11 @@ type JobRepository interface {
 	FindByIDs(ctx context.Context, ids []string) (map[string]*entity.Job, error)
 
 	FindAll(ctx context.Context) ([]*entity.Job, error)
+
+	// Update applies mutate to the stored job atomically under the write lock and
+	// returns a copy of the result. If mutate returns an error nothing is written and
+	// that error is propagated — this is how compare-and-swap guards are built.
+	//
+	// mutate MUST NOT call back into the repository: the write lock is held.
+	Update(ctx context.Context, id string, mutate func(*entity.Job) error) (*entity.Job, error)
 }
