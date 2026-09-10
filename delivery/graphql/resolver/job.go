@@ -6,12 +6,14 @@ import (
 	_interface "jobqueue/interface"
 )
 
+// JobResolver adapts an entity.Job to the GraphQL Job type.
 type JobResolver struct {
 	Data       entity.Job
 	JobService _interface.JobService
 	Dataloader *_dataloader.GeneralDataloader
 }
 
+// JobStatusResolver adapts an entity.JobStatus to the GraphQL JobStatus type.
 type JobStatusResolver struct {
 	Data       entity.JobStatus
 	JobService _interface.JobService

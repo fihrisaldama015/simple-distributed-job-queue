@@ -26,6 +26,8 @@ type JobService interface {
 	GetJobStatus(ctx context.Context) (entity.JobStatus, error)
 }
 
+// JobRepository is the persistence port. Every returned *entity.Job is a copy the
+// caller owns; mutating it never affects stored state.
 type JobRepository interface {
 	Save(ctx context.Context, job *entity.Job) error
 

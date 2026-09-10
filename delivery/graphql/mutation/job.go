@@ -7,6 +7,7 @@ import (
 	_interface "jobqueue/interface"
 )
 
+// JobMutation resolves the GraphQL Mutation type - currently just Enqueue.
 type JobMutation struct {
 	jobService _interface.JobService
 	dataloader *_dataloader.GeneralDataloader

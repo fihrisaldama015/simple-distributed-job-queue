@@ -12,6 +12,7 @@ import (
 	"github.com/graph-gophers/dataloader/v6"
 )
 
+// JobQuery resolves the GraphQL Query type: Jobs, Job and JobStatus.
 type JobQuery struct {
 	jobService _interface.JobService
 	dataloader *_dataloader.GeneralDataloader
@@ -89,6 +90,7 @@ func (q JobQuery) JobStatus(ctx context.Context) (resolver.JobStatusResolver, er
 	}, nil
 }
 
+// NewJobQuery ...
 func NewJobQuery(jobService _interface.JobService,
 	dataloader *_dataloader.GeneralDataloader) JobQuery {
 	return JobQuery{

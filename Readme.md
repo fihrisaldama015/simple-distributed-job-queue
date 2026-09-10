@@ -211,29 +211,3 @@ mutation { Enqueue(task: "send-email", idempotencyKey: "order-42") { id status }
 The argument is optional, so every operation in `web/documentation.graphql` runs
 unchanged.
 
-### Deliberate changes to the skeleton
-
-- **The repository returns copies.** The original stored the caller's pointer and
-  handed that same pointer back to readers, so a worker mutating a job raced any
-  concurrent GraphQL query — a data race `go test -race` reports.
-- **The DataLoader is now built per request.** The original built one at startup with
-  an unbounded cache, which would have served permanently stale jobs: a completed job
-  would still report as `pending`.
-- **The GraphQL schema is embedded with `//go:embed`** instead of `go-bindata`, which
-  is unmaintained and not installed here — `make bind-static` failed, so the schema
-  could not be regenerated at all.
-- **The dashboard uses `html/template`**; the placeholder used `text/template`, which
-  does not escape user-supplied task names.
-- **The unused `logrus` logger was removed** in favour of the zap logger the project
-  already installs globally.
-- **htmx is vendored** at `web/static/htmx.min.js` rather than loaded from a CDN, so
-  the dashboard works without internet access.
-
-### Known limitations
-
-- State is in memory and does not survive a restart — by design, per the assignment.
-- On shutdown, in-flight jobs are allowed to finish but jobs still waiting in the queue
-  stay `pending`. Since the store dies with the process, draining them would only slow
-  shutdown down.
-- There is no dead-letter queue. Exhausted jobs remain visible as `failed` with the
-  last error recorded.

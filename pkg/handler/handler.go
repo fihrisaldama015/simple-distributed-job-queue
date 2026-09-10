@@ -42,6 +42,8 @@ func GraphQLHandler(h http.Handler) echo.HandlerFunc {
 	}
 }
 
+// GraphiQLHandler serves the GraphiQL page pre-seeded with the documented queries
+// from web/documentation.graphql and the default variables from web/variables.json.
 func GraphiQLHandler(c echo.Context) (err error) {
 	// Define the data to pass into the template
 	docContent, err := ioutil.ReadFile("./web/documentation.graphql")
