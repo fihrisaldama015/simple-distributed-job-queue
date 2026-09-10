@@ -102,6 +102,35 @@ func (q jobService) GetAllJobs(ctx context.Context) ([]*entity.Job, error) {
 	return jobs, nil
 }
 
+// ListJobs applies opts to the same job list GetAllJobs returns. Filtering happens
+// here, not in the dashboard handler, so it is one place to test and reuse rather
+// than logic duplicated into the delivery layer.
+func (q jobService) ListJobs(ctx context.Context, opts _interface.JobListOptions) ([]*entity.Job, error) {
+	jobs, err := q.jobRepo.FindAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	taskQuery := strings.ToLower(strings.TrimSpace(opts.TaskQuery))
+	filtered := make([]*entity.Job, 0, len(jobs))
+	for _, job := range jobs {
+		if opts.Status != "" && job.Status != opts.Status {
+			continue
+		}
+		if taskQuery != "" && !strings.Contains(strings.ToLower(job.Task), taskQuery) {
+			continue
+		}
+		filtered = append(filtered, job)
+	}
+
+	if opts.NewestFirst {
+		for i, j := 0, len(filtered)-1; i < j; i, j = i+1, j-1 {
+			filtered[i], filtered[j] = filtered[j], filtered[i]
+		}
+	}
+	return filtered, nil
+}
+
 // GetJobStatus ...
 func (q jobService) GetJobStatus(ctx context.Context) (entity.JobStatus, error) {
 	return q.jobRepo.CountByStatus(ctx)

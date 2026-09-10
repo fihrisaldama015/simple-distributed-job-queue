@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"jobqueue/entity"
 	_interface "jobqueue/interface"
@@ -173,6 +174,115 @@ func TestGetAllJobsReturnsEmptySliceNotNil(t *testing.T) {
 	}
 	if jobs == nil {
 		t.Fatal("GetAllJobs() returned nil, want an empty slice")
+	}
+}
+
+// ListJobs backs the dashboard's status filter, task search and sort toggle - none of
+// which exist anywhere else, so this is the only place their behavior is proven.
+func TestListJobsFiltersByStatus(t *testing.T) {
+	svc, repo := newTestService(&fakeDispatcher{})
+	seedListJobs(t, repo)
+
+	jobs, err := svc.ListJobs(context.Background(), _interface.JobListOptions{Status: entity.StatusRunning})
+	if err != nil {
+		t.Fatalf("ListJobs() error = %v", err)
+	}
+	if len(jobs) != 1 || jobs[0].Task != "send-email" {
+		t.Fatalf("jobs = %+v, want exactly the one running job", jobs)
+	}
+}
+
+func TestListJobsSearchesTaskCaseInsensitively(t *testing.T) {
+	svc, repo := newTestService(&fakeDispatcher{})
+	seedListJobs(t, repo)
+
+	jobs, err := svc.ListJobs(context.Background(), _interface.JobListOptions{TaskQuery: "UNSTABLE"})
+	if err != nil {
+		t.Fatalf("ListJobs() error = %v", err)
+	}
+	if len(jobs) != 1 || jobs[0].Task != "unstable-job" {
+		t.Fatalf("jobs = %+v, want exactly the unstable-job", jobs)
+	}
+}
+
+func TestListJobsCombinesStatusAndTaskFilters(t *testing.T) {
+	svc, repo := newTestService(&fakeDispatcher{})
+	seedListJobs(t, repo)
+
+	jobs, err := svc.ListJobs(context.Background(), _interface.JobListOptions{
+		Status: entity.StatusCompleted, TaskQuery: "load",
+	})
+	if err != nil {
+		t.Fatalf("ListJobs() error = %v", err)
+	}
+	if len(jobs) != 1 || jobs[0].Task != "load-test" {
+		t.Fatalf("jobs = %+v, want exactly the completed load-test job", jobs)
+	}
+}
+
+func TestListJobsSortsNewestFirstOnRequest(t *testing.T) {
+	svc, repo := newTestService(&fakeDispatcher{})
+	seedListJobs(t, repo)
+
+	oldestFirst, err := svc.ListJobs(context.Background(), _interface.JobListOptions{})
+	if err != nil {
+		t.Fatalf("ListJobs() error = %v", err)
+	}
+	newestFirst, err := svc.ListJobs(context.Background(), _interface.JobListOptions{NewestFirst: true})
+	if err != nil {
+		t.Fatalf("ListJobs() error = %v", err)
+	}
+
+	if len(oldestFirst) != len(newestFirst) {
+		t.Fatalf("oldestFirst has %d jobs, newestFirst has %d - a sort must not drop jobs", len(oldestFirst), len(newestFirst))
+	}
+	n := len(oldestFirst)
+	for i := 0; i < n; i++ {
+		if oldestFirst[i].ID != newestFirst[n-1-i].ID {
+			t.Fatalf("newestFirst is not the exact reverse of oldestFirst at index %d", i)
+		}
+	}
+}
+
+// An empty JobListOptions must behave exactly like GetAllJobs - the dashboard calls
+// this with no filters active on every ordinary poll.
+func TestListJobsWithNoOptionsMatchesGetAllJobs(t *testing.T) {
+	svc, repo := newTestService(&fakeDispatcher{})
+	seedListJobs(t, repo)
+
+	all, err := svc.GetAllJobs(context.Background())
+	if err != nil {
+		t.Fatalf("GetAllJobs() error = %v", err)
+	}
+	listed, err := svc.ListJobs(context.Background(), _interface.JobListOptions{})
+	if err != nil {
+		t.Fatalf("ListJobs() error = %v", err)
+	}
+	if len(all) != len(listed) {
+		t.Fatalf("GetAllJobs returned %d, ListJobs returned %d", len(all), len(listed))
+	}
+	for i := range all {
+		if all[i].ID != listed[i].ID {
+			t.Fatalf("order differs at index %d: GetAllJobs=%s ListJobs=%s", i, all[i].ID, listed[i].ID)
+		}
+	}
+}
+
+// seedListJobs saves four jobs directly (bypassing Enqueue/dispatch) covering every
+// status and a range of task names, so filter/search/sort tests have a fixed target.
+func seedListJobs(t *testing.T, repo _interface.JobRepository) {
+	t.Helper()
+	now := time.Now()
+	jobs := []*entity.Job{
+		{ID: "job-1", Task: "send-email", Status: entity.StatusPending, CreatedAt: now},
+		{ID: "job-2", Task: "send-email", Status: entity.StatusRunning, CreatedAt: now.Add(time.Second)},
+		{ID: "job-3", Task: "unstable-job", Status: entity.StatusFailed, CreatedAt: now.Add(2 * time.Second)},
+		{ID: "job-4", Task: "load-test", Status: entity.StatusCompleted, CreatedAt: now.Add(3 * time.Second)},
+	}
+	for _, job := range jobs {
+		if err := repo.Save(context.Background(), job); err != nil {
+			t.Fatalf("Save() error = %v", err)
+		}
 	}
 }
 

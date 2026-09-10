@@ -22,8 +22,27 @@ type JobService interface {
 	// GetAllJobs returns every job, oldest first. Never nil.
 	GetAllJobs(ctx context.Context) ([]*entity.Job, error)
 
+	// ListJobs is GetAllJobs with optional status/task filters and an oldest/newest
+	// toggle, for the dashboard's filter bar. A zero-value JobListOptions behaves
+	// exactly like GetAllJobs.
+	ListJobs(ctx context.Context, opts JobListOptions) ([]*entity.Job, error)
+
 	// GetJobStatus counts jobs in each of the four states.
 	GetJobStatus(ctx context.Context) (entity.JobStatus, error)
+}
+
+// JobListOptions filters and orders the result of ListJobs. The zero value matches
+// every job, oldest first - the same as GetAllJobs.
+type JobListOptions struct {
+	// Status restricts the result to jobs in this state. "" means no filter.
+	Status entity.Status
+
+	// TaskQuery restricts the result to jobs whose Task contains this text,
+	// matched case-insensitively. "" means no filter.
+	TaskQuery string
+
+	// NewestFirst reverses the default oldest-first order.
+	NewestFirst bool
 }
 
 // JobRepository is the persistence port. Every returned *entity.Job is a copy the
