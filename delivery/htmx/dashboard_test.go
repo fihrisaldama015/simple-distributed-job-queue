@@ -296,6 +296,46 @@ func TestJobDetailByPathParam(t *testing.T) {
 	if !strings.Contains(body, "every 2s") {
 		t.Fatal("detail fragment should keep polling so retries are visible")
 	}
+	if !strings.Contains(body, "Created") || !strings.Contains(body, "Updated") {
+		t.Fatalf("detail fragment is missing timestamps: %q", body)
+	}
+}
+
+// A job that failed before eventually succeeding must still say so in its detail
+// view - otherwise it looks identical to one that never failed at all.
+func TestJobDetailShowsLastErrorEvenAfterSuccess(t *testing.T) {
+	handler, _ := newTestHandler(t)
+
+	repo := inmemrepo.NewJobRepository().SetInMemConnection(make(map[string]*entity.Job)).Build()
+	handler = NewDashboardHandler(
+		service.NewJobService().SetJobRepository(repo).SetJobDispatcher(recordingDispatcher{}).SetMaxAttempts(3).Build(),
+		handler.tmpl, handler.defaults, zap.NewNop(),
+	)
+	if err := repo.Save(context.Background(), &entity.Job{
+		ID:          "job-1",
+		Task:        "unstable-job",
+		Status:      entity.StatusCompleted,
+		Attempts:    3,
+		MaxAttempts: 3,
+		LastError:   "unstable-job: simulated failure on attempt 2 of 3",
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	c, rec := get(t, "/jobqueue/dashboard/jobs/job-1")
+	c.SetParamNames("id")
+	c.SetParamValues("job-1")
+	if err := handler.JobDetail(c); err != nil {
+		t.Fatalf("JobDetail() error = %v", err)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "simulated failure on attempt 2 of 3") {
+		t.Fatalf("completed job lost its failure history: %q", body)
+	}
+	if !strings.Contains(body, "before it succeeded") {
+		t.Fatalf("completed job's error should be framed as history, not a live problem: %q", body)
+	}
 }
 
 // HTMX ignores non-2xx responses, so an error must arrive as a 200 with a visible

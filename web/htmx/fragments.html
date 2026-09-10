@@ -48,7 +48,15 @@
     <div><dt>Task</dt><dd>{{.Task}}</dd></div>
     <div><dt>Status</dt><dd><span class="badge {{.Status}}"><span class="dot"></span>{{.Status}}</span></dd></div>
     <div><dt>Attempts</dt><dd>{{.Attempts}} of {{.MaxAttempts}}</dd></div>
-    {{if .LastError}}<div><dt>Last error</dt><dd class="error">{{.LastError}}</dd></div>{{end}}
+    <div><dt>Created</dt><dd>{{.CreatedAt.Format "15:04:05"}}</dd></div>
+    <div><dt>Updated</dt><dd>{{.UpdatedAt.Format "15:04:05"}}</dd></div>
+    {{if .LastError}}
+      {{if eq .Status "completed"}}
+        <div><dt>Last error</dt><dd class="error">{{.LastError}} (before it succeeded)</dd></div>
+      {{else}}
+        <div><dt>Last error</dt><dd class="error">{{.LastError}}</dd></div>
+      {{end}}
+    {{end}}
   </dl>
 </div>
 {{end}}
