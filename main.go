@@ -39,6 +39,7 @@ func main() {
 	e.Echo.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
 		Format: "${remote_ip} ${time_rfc3339_nano} \"${method} ${path}\" ${status} ${bytes_out} \"${referer}\" \"${user_agent}\"\n",
 	}))
+	e.Echo.Use(handler.Recover())
 	e.Echo.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{"*"},
 		AllowMethods: []string{echo.GET, echo.POST, echo.OPTIONS},
