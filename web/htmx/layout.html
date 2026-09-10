@@ -8,18 +8,16 @@
   <script src="/static/htmx.min.js"></script>
   <style>
     :root {
-      /* Color: one accent (violet) owns the app's own actions and focus states;
-         the four status colors are reserved for job state and never reused
-         elsewhere, so color always means one thing. */
+      /* Color: no invented brand hue. Ink does double duty as text and as the
+         primary action color, so the four status colors stay the only color
+         language on the page and never compete with anything else. */
       --bg: #f6f7fa;
       --surface: #ffffff;
       --surface-muted: #eef1f5;
       --border: #dee3ea;
       --ink: #12161f;
+      --ink-hover: #262b38;
       --muted: #5b6472;
-      --accent: #6d28d9;
-      --accent-hover: #5b21b6;
-      --accent-soft: rgba(109, 40, 217, .10);
       --pending: #64748b;
       --running: #2563eb;
       --failed: #dc2626;
@@ -55,27 +53,10 @@
     .subhead {
       color: var(--muted);
       font-size: .8125rem;
-      margin: var(--sp-1) 0 var(--sp-5);
+      max-width: 56ch;
+      margin: var(--sp-2) 0 0;
     }
 
-    header.page-header {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: var(--sp-3);
-      margin-bottom: var(--sp-1);
-    }
-
-    /* A compact liveness chip, not a full sentence: the page title already says
-       what this is, this only needs to answer "is it working right now". */
-    .live {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--sp-2);
-      font-size: .8125rem;
-      color: var(--muted);
-    }
     .dot {
       width: 8px; height: 8px; border-radius: 50%;
       background: var(--completed);
@@ -90,8 +71,27 @@
     }
     .stack > * + * { margin-top: var(--sp-5); }
 
-    /* Action row: field labels, inputs, and three buttons with distinct weight
-       so the eye lands on "Create 3 jobs" first without being told to. */
+    /* Shared input style: every text field on the page looks the same,
+       whether it's a job name or a job ID search box. */
+    input[type="text"], input:not([type]) {
+      width: 100%;
+      height: 36px;
+      padding: 0 var(--sp-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: .875rem;
+      font-family: inherit;
+      background: var(--surface);
+      color: var(--ink);
+    }
+    input[type="text"]:focus-visible, input:not([type]):focus-visible {
+      outline: 2px solid var(--ink);
+      outline-offset: 1px;
+      border-color: var(--ink);
+    }
+
+    /* Action row: field labels, inputs, and buttons with distinct weight so
+       the eye lands on "Create 3 jobs" first without being told to. */
     .actions {
       display: flex;
       gap: var(--sp-6);
@@ -111,23 +111,8 @@
       color: var(--muted);
       margin-bottom: var(--sp-1);
     }
-    .field input {
-      width: 100%;
-      height: 36px;
-      padding: 0 var(--sp-3);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      font-size: .875rem;
-      background: var(--surface);
-      color: var(--ink);
-    }
-    .field input:focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 1px;
-      border-color: var(--accent);
-    }
 
-    .button-row { display: flex; gap: var(--sp-3); flex-wrap: wrap; }
+    .button-row { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
 
     .btn {
       height: 36px;
@@ -144,14 +129,14 @@
     @media (prefers-reduced-motion: no-preference) {
       .btn { transition: background-color .15s ease, border-color .15s ease; }
     }
-    .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
     .btn-primary {
-      background: var(--accent);
-      border-color: var(--accent);
+      background: var(--ink);
+      border-color: var(--ink);
       color: #fff;
     }
-    .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .btn-primary:hover { background: var(--ink-hover); border-color: var(--ink-hover); }
 
     .btn-secondary {
       background: var(--surface);
@@ -160,15 +145,65 @@
     }
     .btn-secondary:hover { background: var(--surface-muted); }
 
-    /* Load Test moves 50 jobs at once against an 8-worker pool - a heavier action
-       than the others, so it reads differently before you even see the confirm
-       dialog. Amber signals "worth a second thought", not "danger". */
-    .btn-caution {
-      background: var(--surface);
-      border-color: #fbbf24;
-      color: #92400e;
+    /* A small, keyboard-reachable info affordance for actions whose name
+       alone doesn't explain what they do or why. Hover or focus to read it;
+       nothing is hidden that changes what a button does, only why it matters. */
+    .info-tip {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px; height: 18px;
+      flex: none;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      color: var(--muted);
+      font-size: .6875rem;
+      font-weight: 700;
+      font-style: normal;
+      cursor: default;
     }
-    .btn-caution:hover { background: rgba(245, 158, 11, .08); }
+    .info-tip:hover .tooltip-bubble,
+    .info-tip:focus-visible .tooltip-bubble {
+      opacity: 1;
+      visibility: visible;
+      transform: translateY(0);
+    }
+    .tooltip-bubble {
+      position: absolute;
+      bottom: calc(100% + var(--sp-2));
+      left: 50%;
+      margin-left: -125px;
+      transform: translateY(4px);
+      width: 250px;
+      background: var(--surface);
+      color: var(--ink);
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 16px rgba(18, 22, 31, .12);
+      font-size: .75rem;
+      font-weight: 400;
+      line-height: 1.5;
+      text-align: left;
+      padding: var(--sp-3);
+      border-radius: var(--radius);
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      z-index: 20;
+    }
+    /* For an icon near the right edge of the page, centering would push the
+       bubble past the viewport and force the whole page to scroll
+       horizontally - visibility:hidden still occupies layout space, so an
+       off-screen bubble affects scroll width even while invisible. Anchoring
+       to the icon's right edge instead keeps it growing leftward, on screen. */
+    .info-tip.align-right .tooltip-bubble {
+      left: auto;
+      right: 0;
+      margin-left: 0;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .tooltip-bubble { transition: opacity .12s ease, transform .12s ease; }
+    }
 
     /* Stats: one strip with internal dividers, not four repeated shadow cards. */
     .stats {
@@ -284,16 +319,34 @@
     dt { color: var(--muted); }
     dd { margin: 0; word-break: break-all; }
     dd.id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .75rem; }
+
+    /* Custom confirm modal, replacing the browser's native confirm() so it can
+       be dismissed with Esc, a backdrop click, or a Cancel button - the native
+       dialog offers none of those. */
+    dialog.confirm-dialog {
+      max-width: 360px;
+      width: calc(100% - var(--sp-6));
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: var(--sp-5);
+      color: var(--ink);
+      font: inherit;
+    }
+    dialog.confirm-dialog::backdrop { background: rgba(18, 22, 31, .35); }
+    dialog.confirm-dialog p { margin: 0 0 var(--sp-5); font-size: .875rem; }
+    .confirm-dialog-actions { display: flex; justify-content: flex-end; gap: var(--sp-3); }
   </style>
 </head>
 <body>
   <div class="stack">
-    <header class="page-header">
-      <div>
-        <h1>Job Queue</h1>
-        <p class="subhead">Watch jobs move through the queue in real time.</p>
-      </div>
-      <div id="message" hx-get="/jobqueue/dashboard/message" hx-trigger="load" hx-swap="innerHTML"></div>
+    <header>
+      <h1>Job Queue</h1>
+      <p class="subhead">This simulates a background job queue: create jobs, watch failures retry with backoff, and see how a fixed pool of workers handles a burst of work.</p>
+      <!-- Required entry-point fragment (README: "initial HTMX fragment entry
+           point"). It has no useful content to show the user, so it stays
+           off-screen rather than occupying header space for nothing. -->
+      <div id="message" hx-get="/jobqueue/dashboard/message" hx-trigger="load"
+           hx-swap="innerHTML" style="display:none"></div>
     </header>
 
     <div class="card">
@@ -320,11 +373,28 @@
         <div class="button-row">
           <button class="btn btn-primary" hx-post="/jobqueue/dashboard/jobs/unstable"
                   hx-target="#jobs-table" hx-swap="innerHTML">Create unstable job</button>
+          <span class="info-tip" tabindex="0" aria-describedby="tip-unstable">
+            i
+            <span role="tooltip" id="tip-unstable" class="tooltip-bubble">
+              Runs a job that fails on its first two attempts and succeeds on the
+              third, so you can watch the retry policy back off and recover.
+            </span>
+          </span>
+
           <button class="btn btn-secondary" hx-get="/jobqueue/dashboard/jobs"
                   hx-target="#jobs-table" hx-swap="innerHTML">Refresh</button>
-          <button class="btn btn-caution" hx-post="/jobqueue/dashboard/jobs/loadtest"
+
+          <button class="btn btn-secondary" hx-post="/jobqueue/dashboard/jobs/loadtest"
                   hx-target="#jobs-table" hx-swap="innerHTML"
                   hx-confirm="Enqueue 50 jobs against the 8-worker pool?">Load test - 50 jobs</button>
+          <span class="info-tip align-right" tabindex="0" aria-describedby="tip-loadtest">
+            i
+            <span role="tooltip" id="tip-loadtest" class="tooltip-bubble">
+              Enqueues 50 jobs at once. Only 8 workers run at a time, so you'll see
+              Pending drain while Running stays capped at 8 - the queue's
+              concurrency limit, made visible.
+            </span>
+          </span>
         </div>
       </div>
     </div>
@@ -350,7 +420,7 @@
       <div class="card detail-panel">
         <h2>Job detail</h2>
         <div class="search-row">
-          <input id="job-id-input" name="id" placeholder="Paste a job ID…">
+          <input id="job-id-input" name="id" type="text" placeholder="Paste a job ID…">
           <button class="btn btn-secondary" hx-get="/jobqueue/dashboard/jobs/search"
                   hx-include="#job-id-input"
                   hx-target="#job-detail" hx-swap="innerHTML">Find</button>
@@ -359,6 +429,57 @@
       </div>
     </div>
   </div>
+
+  <dialog id="confirm-dialog" class="confirm-dialog">
+    <p id="confirm-dialog-message"></p>
+    <div class="confirm-dialog-actions">
+      <button type="button" class="btn btn-secondary" data-confirm-action="cancel">Cancel</button>
+      <button type="button" class="btn btn-primary" data-confirm-action="confirm">Confirm</button>
+    </div>
+  </dialog>
+
+  <script>
+    // Replaces htmx's default window.confirm() with a dismissible <dialog> -
+    // Esc, a backdrop click, or Cancel all close it without issuing the
+    // request. Works for any element carrying hx-confirm, not just this page's
+    // Load Test button.
+    (function () {
+      var dialog = document.getElementById('confirm-dialog');
+      var message = document.getElementById('confirm-dialog-message');
+      var pending = null;
+
+      document.body.addEventListener('htmx:confirm', function (evt) {
+        var el = evt.target;
+        if (!el.hasAttribute('hx-confirm')) return;
+        evt.preventDefault();
+        message.textContent = el.getAttribute('hx-confirm');
+        pending = evt.detail;
+        dialog.showModal();
+      });
+
+      dialog.addEventListener('click', function (evt) {
+        if (evt.target.dataset.confirmAction === 'confirm') {
+          dialog.close();
+        } else if (evt.target.dataset.confirmAction === 'cancel' || evt.target === dialog) {
+          pending = null;
+          dialog.close();
+        }
+      });
+
+      // Esc fires 'cancel' before 'close' - treat it the same as clicking Cancel,
+      // not as confirming.
+      dialog.addEventListener('cancel', function () {
+        pending = null;
+      });
+
+      dialog.addEventListener('close', function () {
+        if (pending) {
+          pending.issueRequest(true);
+          pending = null;
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
 {{end}}
