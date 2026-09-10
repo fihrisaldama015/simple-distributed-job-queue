@@ -265,6 +265,43 @@
       margin: 0 0 var(--sp-4);
     }
 
+    .jobs-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--sp-3);
+      margin-bottom: var(--sp-4);
+    }
+    .jobs-header h2 { margin: 0; }
+
+    .table-toolbar { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+    .filter-group { display: flex; gap: var(--sp-1); }
+    .filter-chip {
+      height: 28px;
+      padding: 0 var(--sp-3);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: .75rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .filter-chip:hover { background: var(--surface-muted); }
+    .filter-chip.active { background: var(--ink); border-color: var(--ink); color: #fff; }
+
+    .task-search {
+      height: 28px;
+      width: 160px;
+      padding: 0 var(--sp-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: .8125rem;
+    }
+
+    #sort-toggle { height: 28px; padding: 0 var(--sp-3); font-size: .75rem; }
+
     table { width: 100%; border-collapse: collapse; font-size: .8125rem; }
     thead th {
       position: sticky; top: 0;
@@ -396,7 +433,8 @@
     <div class="card">
       <div class="actions">
         <form class="field-group" hx-post="/jobqueue/dashboard/jobs/create"
-              hx-target="#jobs-table" hx-swap="innerHTML">
+              hx-target="#jobs-table" hx-swap="innerHTML"
+              hx-include="#task-search, #status-value, #sort-value">
           <div class="field">
             <label for="job1">Job 1</label>
             <input id="job1" name="job1" value="{{.Defaults.Job1}}">
@@ -416,7 +454,8 @@
 
         <div class="button-row">
           <button class="btn btn-primary" hx-post="/jobqueue/dashboard/jobs/unstable"
-                  hx-target="#jobs-table" hx-swap="innerHTML">Create unstable job</button>
+                  hx-target="#jobs-table" hx-swap="innerHTML"
+                  hx-include="#task-search, #status-value, #sort-value">Create unstable job</button>
           <span class="info-tip" tabindex="0" aria-describedby="tip-unstable">
             i
             <span role="tooltip" id="tip-unstable" class="tooltip-bubble">
@@ -426,10 +465,12 @@
           </span>
 
           <button class="btn btn-secondary" hx-get="/jobqueue/dashboard/jobs"
-                  hx-target="#jobs-table" hx-swap="innerHTML">Refresh</button>
+                  hx-target="#jobs-table" hx-swap="innerHTML"
+                  hx-include="#task-search, #status-value, #sort-value">Refresh</button>
 
           <button class="btn btn-secondary" hx-post="/jobqueue/dashboard/jobs/loadtest"
                   hx-target="#jobs-table" hx-swap="innerHTML"
+                  hx-include="#task-search, #status-value, #sort-value"
                   hx-confirm="Enqueue 50 jobs against the 8-worker pool?">Load test - 50 jobs</button>
           <span class="info-tip align-right" tabindex="0" aria-describedby="tip-loadtest">
             i
@@ -451,11 +492,30 @@
 
     <div class="results">
       <div class="card jobs-panel">
-        <h2>Jobs</h2>
+        <div class="jobs-header">
+          <h2>Jobs</h2>
+          <div class="table-toolbar">
+            <div class="filter-group" id="status-filter">
+              <button type="button" class="filter-chip active" data-status="">All</button>
+              <button type="button" class="filter-chip" data-status="pending">Pending</button>
+              <button type="button" class="filter-chip" data-status="running">Running</button>
+              <button type="button" class="filter-chip" data-status="failed">Failed</button>
+              <button type="button" class="filter-chip" data-status="completed">Completed</button>
+            </div>
+            <input type="hidden" id="status-value" name="status" value="">
+
+            <input type="text" id="task-search" name="task" class="task-search"
+                   placeholder="Search task…">
+
+            <button type="button" class="btn btn-secondary" id="sort-toggle">Oldest first</button>
+            <input type="hidden" id="sort-value" name="sort" value="oldest">
+          </div>
+        </div>
         <div class="jobs-scroll">
           <div id="jobs-table"
                hx-get="/jobqueue/dashboard/jobs"
-               hx-trigger="load, every 2s"
+               hx-trigger="load, every 2s, jobs-filter-changed from:body, input changed delay:300ms from:#task-search"
+               hx-include="#task-search, #status-value, #sort-value"
                hx-swap="innerHTML"></div>
         </div>
       </div>
@@ -524,6 +584,33 @@
           pending.issueRequest(true);
           pending = null;
         }
+      });
+    })();
+
+    // The jobs table filter bar: status chips, task search and the sort toggle all
+    // write into hidden inputs that #jobs-table's own hx-include already reads, then
+    // fire a "jobs-filter-changed" event that #jobs-table listens for - so the very
+    // same request the 2s poll issues also carries whatever filter is active,
+    // instead of the poll silently reverting to an unfiltered list every 2 seconds.
+    (function () {
+      var statusButtons = document.querySelectorAll('#status-filter .filter-chip');
+      var statusValue = document.getElementById('status-value');
+      var sortToggle = document.getElementById('sort-toggle');
+      var sortValue = document.getElementById('sort-value');
+
+      statusButtons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          statusButtons.forEach(function (b) { b.classList.toggle('active', b === btn); });
+          statusValue.value = btn.dataset.status;
+          htmx.trigger(document.body, 'jobs-filter-changed');
+        });
+      });
+
+      sortToggle.addEventListener('click', function () {
+        var newest = sortValue.value !== 'newest';
+        sortValue.value = newest ? 'newest' : 'oldest';
+        sortToggle.textContent = newest ? 'Newest first' : 'Oldest first';
+        htmx.trigger(document.body, 'jobs-filter-changed');
       });
     })();
 
