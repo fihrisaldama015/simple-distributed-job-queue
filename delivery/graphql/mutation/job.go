@@ -5,8 +5,6 @@ import (
 	_dataloader "jobqueue/delivery/graphql/dataloader"
 	"jobqueue/delivery/graphql/resolver"
 	_interface "jobqueue/interface"
-
-	"jobqueue/entity"
 )
 
 type JobMutation struct {
@@ -14,10 +12,29 @@ type JobMutation struct {
 	dataloader *_dataloader.GeneralDataloader
 }
 
-func (q JobMutation) Enqueue(ctx context.Context, args entity.Job) (*resolver.JobResolver, error) {
-	job := entity.Job{}
+// enqueueArgs mirrors the Enqueue arguments declared in the schema. Declaring it
+// explicitly — rather than reusing entity.Job — keeps the resolver honest about which
+// fields are actually inputs.
+type enqueueArgs struct {
+	Task           string
+	IdempotencyKey *string
+}
+
+// Enqueue registers a job and returns it as enqueued: pending, with zero attempts.
+// The job executes in the background; poll Job(id:) to observe its progress.
+func (q JobMutation) Enqueue(ctx context.Context, args enqueueArgs) (*resolver.JobResolver, error) {
+	idempotencyKey := ""
+	if args.IdempotencyKey != nil {
+		idempotencyKey = *args.IdempotencyKey
+	}
+
+	job, err := q.jobService.Enqueue(ctx, args.Task, idempotencyKey)
+	if err != nil {
+		return nil, err
+	}
+
 	return &resolver.JobResolver{
-		Data:       job,
+		Data:       *job,
 		JobService: q.jobService,
 		Dataloader: q.dataloader,
 	}, nil
