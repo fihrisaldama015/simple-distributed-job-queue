@@ -81,7 +81,7 @@ Three trigger buttons at the top of the page:
 | **Create 3 Jobs** | `POST /jobqueue/dashboard/jobs/create` | Reads Job1/Job2/Job3 from the Variables Form |
 | **Create Unstable Job** | `POST /jobqueue/dashboard/jobs/unstable` | Hard-coded `task: "unstable-job"` |
 | **Refresh** *(optional)* | Re-polls `/jobqueue/dashboard/status` and `/jobqueue/dashboard/jobs` | Manual trigger |
-| **Load Test (50 Jobs)** *(added)* | `POST /jobqueue/dashboard/jobs/loadtest` | Enqueues 50 jobs against the 8-worker pool — the only button that makes the bounded pool visible: `Create 3 Jobs` finishes inside one 2s poll tick, so pending/running never register. This one lets you watch `Pending` drain from ~42 to 0 while `Running` sits pinned at 8. |
+| **Load Test (50 Jobs)** *(added)* | `POST /jobqueue/dashboard/jobs/loadtest` | Enqueues 50 jobs against the 8-worker pool - one in five is `unstable-job`, so some bounce back to `Pending` mid-drain to retry. `Create 3 Jobs` finishes inside one 2s poll tick, so pending/running never register there; this button makes both the concurrency ceiling and the retry policy visible together, watching `Pending` drain while `Running` sits pinned at 8. |
 
 #### 2. Variables Form
 Inline form whose values feed the **Create 3 Jobs** action. Defaults must match `web/variables.json`:

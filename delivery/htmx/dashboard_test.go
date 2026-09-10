@@ -182,10 +182,29 @@ func TestLoadTestEnqueuesFiftyJobs(t *testing.T) {
 	if len(jobs) != loadTestJobCount {
 		t.Fatalf("created %d jobs, want %d", len(jobs), loadTestJobCount)
 	}
-	for _, job := range jobs {
-		if job.Task != "load-test" {
-			t.Fatalf("job.Task = %q, want %q", job.Task, "load-test")
+
+	// One in five jobs is the unstable-job retry demo, mirroring the ratio
+	// worker/load_test.go already uses to prove retries survive under load -
+	// the dashboard button should demonstrate the same thing, not just the
+	// worker pool's concurrency ceiling on its own.
+	var plainCount, unstableCount int
+	for i, job := range jobs {
+		want := loadTestTaskName
+		if i%5 == 0 {
+			want = "unstable-job"
+			unstableCount++
+		} else {
+			plainCount++
 		}
+		if job.Task != want {
+			t.Fatalf("jobs[%d].Task = %q, want %q", i, job.Task, want)
+		}
+	}
+	if unstableCount != 10 {
+		t.Fatalf("unstableCount = %d, want 10 (one in five of %d)", unstableCount, loadTestJobCount)
+	}
+	if plainCount != 40 {
+		t.Fatalf("plainCount = %d, want 40", plainCount)
 	}
 
 	if !strings.Contains(rec.Body.String(), "<table") {

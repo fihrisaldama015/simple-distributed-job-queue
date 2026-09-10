@@ -29,6 +29,13 @@ const loadTestJobCount = 50
 // plain job runs.
 const loadTestTaskName = "load-test"
 
+// loadTestUnstableRatio makes every fifth load-test job the unstable-job retry
+// demo instead of a plain job, mirroring the ratio worker/load_test.go already
+// proves survives under load. Without this, Load Test only shows the worker
+// pool's concurrency ceiling; with it, it shows retries recovering while that
+// ceiling is under pressure too.
+const loadTestUnstableRatio = 5
+
 // DashboardHandler serves the dashboard page and its HTMX fragments.
 type DashboardHandler struct {
 	jobService _interface.JobService
@@ -97,7 +104,11 @@ func (h *DashboardHandler) CreateUnstableJob(c echo.Context) error {
 func (h *DashboardHandler) LoadTest(c echo.Context) error {
 	ctx := c.Request().Context()
 	for i := 0; i < loadTestJobCount; i++ {
-		if _, err := h.jobService.Enqueue(ctx, loadTestTaskName, ""); err != nil {
+		task := loadTestTaskName
+		if i%loadTestUnstableRatio == 0 {
+			task = constant.TaskUnstableJob
+		}
+		if _, err := h.jobService.Enqueue(ctx, task, ""); err != nil {
 			h.log.Error("dashboard.load_test_failed", zap.Int("enqueued", i), zap.Error(err))
 			return h.renderError(c, "Could not create the load test jobs: "+err.Error())
 		}

@@ -396,9 +396,10 @@
           <span class="info-tip align-right" tabindex="0" aria-describedby="tip-loadtest">
             i
             <span role="tooltip" id="tip-loadtest" class="tooltip-bubble">
-              Enqueues 50 jobs at once. Only 8 workers run at a time, so you'll see
-              Pending drain while Running stays capped at 8 - the queue's
-              concurrency limit, made visible.
+              Enqueues 50 jobs at once - one in five is the unstable job, so some
+              will bounce back to Pending mid-drain to retry. Only 8 workers run
+              at a time, so you'll see the queue's concurrency limit and its
+              retry policy working under load, together.
             </span>
           </span>
         </div>
