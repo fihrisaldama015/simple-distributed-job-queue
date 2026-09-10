@@ -13,7 +13,7 @@ build:
 	make bind-static
 	$(GOBUILD) -o $(BINARY_NAME) -v main.go
 bind-static:
-	$(GOCMD) generate ./delivery/graphql/schema
+	@echo "schema is embedded with //go:embed — nothing to generate"
 test:
 	@echo "\n\n==================== Start unit test and Integration Test ...... ====================\n\n"
 	$(GOTEST) ./... -cover -race -count=1

@@ -1,26 +1,45 @@
+// Package schema holds the GraphQL SDL for this service.
+//
+// The .graphql files are embedded into the binary with the standard library's
+// //go:embed (Go 1.16+), so the server has no runtime dependency on the working
+// directory and the build has no dependency on a code-generation tool. This replaces
+// the previous go-bindata setup, which required an unmaintained external binary that
+// is not installed on this machine — leaving the schema impossible to regenerate.
 package schema
 
-// TODO:
-// 	- explain why I use .graphql files to define the schema
-// 	- explain why we embed the .graphql files in the binary.
-// 	- explain why this file is necessary and how the method is used.
-//
-// Use `go generate` to pack all *.graphql files under this directory (and sub-directories) into
-// a binary format.
-//
-//go:generate go-bindata -ignore=\.go -pkg=schema -o=bindata.go ./...
+import (
+	"bytes"
+	"embed"
+	"io/fs"
+	"sort"
+)
 
-import "bytes"
+//go:embed *.graphql type/*.graphql
+var schemaFS embed.FS
 
-// String reads the .graphql schema files from the generated _bindata.go file, concatenating the
-// files together into one string.
-//
-// If this method complains about not finding functions AssetNames() or MustAsset(),
-// run `go generate` against this package to generate the functions.
+// String concatenates every .graphql file in this package into a single schema
+// document. Files are concatenated in sorted path order; GraphQL type definitions are
+// order-independent, so the only thing that matters is that the order is stable.
 func String() string {
+	names := make([]string, 0, 8)
+	_ = fs.WalkDir(schemaFS, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		names = append(names, path)
+		return nil
+	})
+	sort.Strings(names)
+
 	buf := bytes.Buffer{}
-	for _, name := range AssetNames() {
-		b := MustAsset(name)
+	for _, name := range names {
+		b, err := schemaFS.ReadFile(name)
+		if err != nil {
+			continue
+		}
 		buf.Write(b)
 
 		// Add a newline if the file does not end in a newline.
