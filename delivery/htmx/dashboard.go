@@ -1,0 +1,148 @@
+// Package htmx serves the server-rendered dashboard. It is a delivery layer only:
+// handlers bind HTTP input, call the job service, and render a template. No business
+// logic lives here.
+package htmx
+
+import (
+	"errors"
+	"html/template"
+	"net/http"
+	"strings"
+
+	"jobqueue/entity"
+	_interface "jobqueue/interface"
+	"jobqueue/pkg/constant"
+
+	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
+)
+
+// DashboardHandler serves the dashboard page and its HTMX fragments.
+type DashboardHandler struct {
+	jobService _interface.JobService
+	tmpl       *template.Template
+	defaults   Variables
+	log        *zap.Logger
+}
+
+// ParseTemplates parses every dashboard template once, at startup. Parsing per request
+// would re-read the files on each of the 2-second polls; failing here also turns a
+// broken template into a startup error instead of a 500 on first click.
+//
+// html/template — not text/template — because task names come from user input.
+func ParseTemplates(glob string) (*template.Template, error) {
+	return template.ParseGlob(glob)
+}
+
+// NewDashboardHandler ...
+func NewDashboardHandler(jobService _interface.JobService, tmpl *template.Template, defaults Variables, log *zap.Logger) *DashboardHandler {
+	if log == nil {
+		log = zap.NewNop()
+	}
+	return &DashboardHandler{jobService: jobService, tmpl: tmpl, defaults: defaults, log: log}
+}
+
+// Page serves the full HTML shell.
+func (h *DashboardHandler) Page(c echo.Context) error {
+	return h.render(c, "page", map[string]interface{}{"Defaults": h.defaults})
+}
+
+// Message serves the fragment the page loads on startup.
+func (h *DashboardHandler) Message(c echo.Context) error {
+	return h.render(c, "message", nil)
+}
+
+// CreateJobs runs the SimultaneousCreateJob scenario from the submitted form.
+func (h *DashboardHandler) CreateJobs(c echo.Context) error {
+	tasks := []string{
+		h.formValueOr(c, "job1", h.defaults.Job1),
+		h.formValueOr(c, "job2", h.defaults.Job2),
+		h.formValueOr(c, "job3", h.defaults.Job3),
+	}
+
+	for _, task := range tasks {
+		if _, err := h.jobService.Enqueue(c.Request().Context(), task, ""); err != nil {
+			h.log.Error("dashboard.create_failed", zap.String("task", task), zap.Error(err))
+			return h.renderError(c, "Could not create jobs: "+err.Error())
+		}
+	}
+
+	return h.JobsTable(c)
+}
+
+// CreateUnstableJob enqueues the task reserved for the retry demonstration.
+func (h *DashboardHandler) CreateUnstableJob(c echo.Context) error {
+	if _, err := h.jobService.Enqueue(c.Request().Context(), constant.TaskUnstableJob, ""); err != nil {
+		h.log.Error("dashboard.create_unstable_failed", zap.Error(err))
+		return h.renderError(c, "Could not create the unstable job: "+err.Error())
+	}
+	return h.JobsTable(c)
+}
+
+// StatusSummary renders the four status counters. Polled every 2 seconds.
+func (h *DashboardHandler) StatusSummary(c echo.Context) error {
+	counts, err := h.jobService.GetJobStatus(c.Request().Context())
+	if err != nil {
+		h.log.Error("dashboard.status_failed", zap.Error(err))
+		return h.renderError(c, "Could not load the status summary.")
+	}
+	return h.render(c, "status", counts)
+}
+
+// JobsTable renders the job list. Polled every 2 seconds.
+func (h *DashboardHandler) JobsTable(c echo.Context) error {
+	jobs, err := h.jobService.GetAllJobs(c.Request().Context())
+	if err != nil {
+		h.log.Error("dashboard.jobs_failed", zap.Error(err))
+		return h.renderError(c, "Could not load the job list.")
+	}
+	return h.render(c, "jobs_table", jobs)
+}
+
+// JobDetail renders one job, addressed by path parameter.
+func (h *DashboardHandler) JobDetail(c echo.Context) error {
+	return h.renderJob(c, c.Param("id"))
+}
+
+// JobSearch renders one job, addressed by query parameter. HTMX cannot build a path
+// segment from an input without JavaScript, so the search box posts the id this way.
+func (h *DashboardHandler) JobSearch(c echo.Context) error {
+	return h.renderJob(c, strings.TrimSpace(c.QueryParam("id")))
+}
+
+func (h *DashboardHandler) renderJob(c echo.Context, id string) error {
+	if id == "" {
+		return h.renderError(c, "Enter a job id to look one up.")
+	}
+
+	job, err := h.jobService.GetJob(c.Request().Context(), id)
+	if err != nil {
+		if errors.Is(err, entity.ErrJobNotFound) {
+			return h.renderError(c, "Job not found: "+id)
+		}
+		h.log.Error("dashboard.job_detail_failed", zap.String("job_id", id), zap.Error(err))
+		return h.renderError(c, "Could not load that job.")
+	}
+
+	return h.render(c, "job_detail", job)
+}
+
+func (h *DashboardHandler) formValueOr(c echo.Context, field, fallback string) string {
+	if value := strings.TrimSpace(c.FormValue(field)); value != "" {
+		return value
+	}
+	return fallback
+}
+
+func (h *DashboardHandler) render(c echo.Context, name string, data interface{}) error {
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMETextHTMLCharsetUTF8)
+	c.Response().WriteHeader(http.StatusOK)
+	return h.tmpl.ExecuteTemplate(c.Response().Writer, name, data)
+}
+
+// renderError answers with HTTP 200 on purpose: HTMX does not swap non-2xx responses,
+// so a 404 would leave the panel showing stale content with no explanation. The real
+// cause is logged; the user sees a message where they are looking.
+func (h *DashboardHandler) renderError(c echo.Context, message string) error {
+	return h.render(c, "error", message)
+}

@@ -106,9 +106,24 @@ func main() {
 	)
 	e.Echo.GET("/graphiql", handler.GraphiQLHandler)
 
-	helloHandler := _htmx.NewHelloHandler()
-	e.Echo.GET("/jobqueue/dashboard", helloHandler.Page)
-	e.Echo.GET("/jobqueue/dashboard/message", helloHandler.Message)
+	dashboardTemplates, err := _htmx.ParseTemplates("./web/htmx/*.html")
+	if err != nil {
+		zap.L().Fatal("dashboard.template_parse_failed", zap.Error(err))
+	}
+	dashboardDefaults, err := _htmx.LoadVariables("./web/variables.json")
+	if err != nil {
+		zap.L().Fatal("dashboard.variables_load_failed", zap.Error(err))
+	}
+	dashboard := _htmx.NewDashboardHandler(jobService, dashboardTemplates, dashboardDefaults, zap.L())
+
+	e.Echo.GET("/jobqueue/dashboard", dashboard.Page)
+	e.Echo.GET("/jobqueue/dashboard/message", dashboard.Message)
+	e.Echo.POST("/jobqueue/dashboard/jobs/create", dashboard.CreateJobs)
+	e.Echo.POST("/jobqueue/dashboard/jobs/unstable", dashboard.CreateUnstableJob)
+	e.Echo.GET("/jobqueue/dashboard/status", dashboard.StatusSummary)
+	e.Echo.GET("/jobqueue/dashboard/jobs", dashboard.JobsTable)
+	e.Echo.GET("/jobqueue/dashboard/jobs/search", dashboard.JobSearch)
+	e.Echo.GET("/jobqueue/dashboard/jobs/:id", dashboard.JobDetail)
 
 	go func() {
 		if err := e.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
