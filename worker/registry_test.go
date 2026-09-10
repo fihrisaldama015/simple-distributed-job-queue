@@ -87,8 +87,13 @@ func TestUnstableHandlerFailsTwiceThenSucceeds(t *testing.T) {
 		if !tt.wantErr && err != nil {
 			t.Fatalf("attempt %d: got %v, want nil", tt.attempt, err)
 		}
-		if tt.wantErr && !strings.Contains(err.Error(), "unstable-job") {
-			t.Fatalf("attempt %d: error %q should name the task", tt.attempt, err)
+		// The message deliberately does not repeat the task name: the pool already
+		// logs "task" as its own structured field (see pool.go), and every place
+		// this string is displayed - the dashboard's job row and detail panel -
+		// already shows the task name in an adjacent column, so repeating it here
+		// would just be noise.
+		if tt.wantErr && !strings.Contains(err.Error(), "simulated failure") {
+			t.Fatalf("attempt %d: error %q should describe what happened", tt.attempt, err)
 		}
 	}
 }

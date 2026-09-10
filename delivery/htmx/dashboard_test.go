@@ -249,7 +249,7 @@ func TestJobsTableShowsLastErrorForARetryingJob(t *testing.T) {
 		Status:      entity.StatusPending,
 		Attempts:    1,
 		MaxAttempts: 3,
-		LastError:   "unstable-job: simulated failure on attempt 1 of 3",
+		LastError:   "simulated failure on attempt 1 of 3",
 	}); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}
@@ -354,7 +354,7 @@ func TestJobDetailShowsLastErrorEvenAfterSuccess(t *testing.T) {
 		Status:      entity.StatusCompleted,
 		Attempts:    3,
 		MaxAttempts: 3,
-		LastError:   "unstable-job: simulated failure on attempt 2 of 3",
+		LastError:   "simulated failure on attempt 2 of 3",
 	}); err != nil {
 		t.Fatalf("Save() error = %v", err)
 	}

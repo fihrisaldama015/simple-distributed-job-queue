@@ -82,7 +82,7 @@ func UnstableHandler(failures int32, work time.Duration) _interface.TaskHandler 
 			return err
 		}
 		if job.Attempts <= failures {
-			return fmt.Errorf("unstable-job: simulated failure on attempt %d of %d",
+			return fmt.Errorf("simulated failure on attempt %d of %d",
 				job.Attempts, job.MaxAttempts)
 		}
 		return nil

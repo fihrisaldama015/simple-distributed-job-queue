@@ -14,6 +14,7 @@ import (
 	inmemrepo "jobqueue/repository/inmem"
 
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // Composing the pool with the real repository (already covered by its own tests) makes
@@ -101,6 +102,44 @@ func TestPoolCompletesJob(t *testing.T) {
 	}
 	if job.LastError != "" {
 		t.Fatalf("LastError = %q, want empty", job.LastError)
+	}
+}
+
+// Every job lifecycle log line must carry the task name as its own structured
+// field - not just embedded inside the error text - so a log line is identifiable
+// (and filterable) on its own, without depending on a handler having chosen to name
+// itself inside its error message.
+func TestRetryLogsCarryTheTaskAsAStructuredField(t *testing.T) {
+	core, logs := observer.New(zap.WarnLevel)
+	repo := inmemrepo.NewJobRepository().SetInMemConnection(make(map[string]*entity.Job)).Build()
+	registry := NewRegistry(0)
+	registry.Register("always-fails", func(context.Context, entity.Job) error { return errors.New("boom") })
+
+	pool := New(Config{
+		Workers: 1, QueueSize: 8, MaxAttempts: 2,
+		BaseBackoff: time.Millisecond, MaxBackoff: 5 * time.Millisecond, ShutdownGrace: 2 * time.Second,
+	}, repo, registry, zap.New(core))
+	pool.Start()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = pool.Shutdown(ctx)
+	})
+
+	seedJob(t, repo, "job-1", "always-fails", 2)
+	if err := pool.Dispatch(context.Background(), "job-1"); err != nil {
+		t.Fatalf("Dispatch() error = %v", err)
+	}
+	waitForStatus(t, repo, "job-1", entity.StatusFailed, 2*time.Second)
+
+	for _, name := range []string{"job.attempt_failed", "job.retry_scheduled"} {
+		entries := logs.FilterMessage(name).All()
+		if len(entries) == 0 {
+			t.Fatalf("no %q log entry was recorded", name)
+		}
+		if got := entries[0].ContextMap()["task"]; got != "always-fails" {
+			t.Fatalf("%q log entry task field = %v, want %q", name, got, "always-fails")
+		}
 	}
 }
 

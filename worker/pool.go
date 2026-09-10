@@ -168,7 +168,8 @@ func (p *Pool) process(ctx context.Context, workerID int, jobID string) {
 
 	default:
 		p.log.Warn("job.attempt_failed",
-			zap.String("job_id", job.ID), zap.Int32("attempt", job.Attempts),
+			zap.String("job_id", job.ID), zap.String("task", job.Task),
+			zap.Int32("attempt", job.Attempts),
 			zap.Int32("max_attempts", job.MaxAttempts), zap.Error(runErr))
 		p.scheduleRetry(ctx, job, runErr)
 	}
@@ -245,6 +246,7 @@ func (p *Pool) scheduleRetry(ctx context.Context, job *entity.Job, cause error) 
 
 	p.log.Warn("job.retry_scheduled",
 		zap.String("job_id", job.ID),
+		zap.String("task", job.Task),
 		zap.Int32("attempt", job.Attempts),
 		zap.Duration("delay", delay))
 
