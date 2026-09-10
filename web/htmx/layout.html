@@ -8,112 +8,355 @@
   <script src="/static/htmx.min.js"></script>
   <style>
     :root {
-      --bg: #f6f7f9; --surface: #ffffff; --border: #e3e6ea; --text: #1b1f24;
-      --muted: #6b7280; --pending: #6b7280; --running: #2563eb;
-      --failed: #dc2626; --completed: #059669;
+      /* Color: one accent (violet) owns the app's own actions and focus states;
+         the four status colors are reserved for job state and never reused
+         elsewhere, so color always means one thing. */
+      --bg: #f6f7fa;
+      --surface: #ffffff;
+      --surface-muted: #eef1f5;
+      --border: #dee3ea;
+      --ink: #12161f;
+      --muted: #5b6472;
+      --accent: #6d28d9;
+      --accent-hover: #5b21b6;
+      --accent-soft: rgba(109, 40, 217, .10);
+      --pending: #64748b;
+      --running: #2563eb;
+      --failed: #dc2626;
+      --completed: #059669;
+
+      /* Spacing scale, used everywhere instead of one-off values. */
+      --sp-1: 4px; --sp-2: 8px; --sp-3: 12px; --sp-4: 16px;
+      --sp-5: 20px; --sp-6: 24px; --sp-7: 32px;
+
+      --radius: 8px;
     }
+
     * { box-sizing: border-box; }
+    html { color-scheme: light; }
+
     body {
-      margin: 0; padding: 24px; background: var(--bg); color: var(--text);
+      margin: 0;
+      padding: var(--sp-6);
+      background: var(--bg);
+      color: var(--ink);
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
     }
-    h1 { font-size: 1.4rem; margin: 0 0 4px; }
-    .sub { color: var(--muted); font-size: .85rem; margin-bottom: 20px; }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 650;
+      letter-spacing: -0.01em;
+      margin: 0;
+    }
+    .subhead {
+      color: var(--muted);
+      font-size: .8125rem;
+      margin: var(--sp-1) 0 var(--sp-5);
+    }
+
+    header.page-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: var(--sp-3);
+      margin-bottom: var(--sp-1);
+    }
+
+    /* A compact liveness chip, not a full sentence: the page title already says
+       what this is, this only needs to answer "is it working right now". */
+    .live {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--sp-2);
+      font-size: .8125rem;
+      color: var(--muted);
+    }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--completed);
+      flex: none;
+    }
+
     .card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; padding: 16px; margin-bottom: 16px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: var(--sp-5);
     }
-    .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end; }
-    .col { flex: 1 1 320px; }
-    label { display: block; font-size: .75rem; color: var(--muted); margin-bottom: 4px; }
-    input {
-      width: 100%; padding: 8px 10px; border: 1px solid var(--border);
-      border-radius: 6px; font-size: .9rem;
+    .stack > * + * { margin-top: var(--sp-5); }
+
+    /* Action row: field labels, inputs, and three buttons with distinct weight
+       so the eye lands on "Create 3 jobs" first without being told to. */
+    .actions {
+      display: flex;
+      gap: var(--sp-6);
+      flex-wrap: wrap;
+      align-items: flex-end;
     }
-    button {
-      padding: 9px 16px; border: 1px solid var(--border); border-radius: 6px;
-      background: var(--text); color: #fff; font-size: .85rem; cursor: pointer;
+    .field-group {
+      display: flex;
+      gap: var(--sp-4);
+      flex-wrap: wrap;
+      flex: 1 1 420px;
     }
-    button.secondary { background: var(--surface); color: var(--text); }
-    .stats { display: flex; gap: 12px; flex-wrap: wrap; }
-    .stat { flex: 1 1 120px; border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
-    .stat .label { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-    .stat .value { font-size: 1.8rem; font-weight: 600; line-height: 1.2; }
-    table { width: 100%; border-collapse: collapse; font-size: .85rem; }
-    th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
-    th { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-    td.id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .75rem; }
+    .field { flex: 1 1 120px; }
+    .field label {
+      display: block;
+      font-size: .75rem;
+      color: var(--muted);
+      margin-bottom: var(--sp-1);
+    }
+    .field input {
+      width: 100%;
+      height: 36px;
+      padding: 0 var(--sp-3);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: .875rem;
+      background: var(--surface);
+      color: var(--ink);
+    }
+    .field input:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+      border-color: var(--accent);
+    }
+
+    .button-row { display: flex; gap: var(--sp-3); flex-wrap: wrap; }
+
+    .btn {
+      height: 36px;
+      padding: 0 var(--sp-4);
+      border-radius: var(--radius);
+      border: 1px solid transparent;
+      font-size: .8125rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      white-space: nowrap;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .btn { transition: background-color .15s ease, border-color .15s ease; }
+    }
+    .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+    .btn-secondary {
+      background: var(--surface);
+      border-color: var(--border);
+      color: var(--ink);
+    }
+    .btn-secondary:hover { background: var(--surface-muted); }
+
+    /* Load Test moves 50 jobs at once against an 8-worker pool - a heavier action
+       than the others, so it reads differently before you even see the confirm
+       dialog. Amber signals "worth a second thought", not "danger". */
+    .btn-caution {
+      background: var(--surface);
+      border-color: #fbbf24;
+      color: #92400e;
+    }
+    .btn-caution:hover { background: rgba(245, 158, 11, .08); }
+
+    /* Stats: one strip with internal dividers, not four repeated shadow cards. */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+    }
+    .stat {
+      padding: var(--sp-2) var(--sp-5);
+      border-left: 3px solid var(--stat-color, var(--border));
+    }
+    .stat-pending   { --stat-color: var(--pending); }
+    .stat-running   { --stat-color: var(--running); }
+    .stat-failed    { --stat-color: var(--failed); }
+    .stat-completed { --stat-color: var(--completed); }
+    .stat .label { font-size: .8125rem; color: var(--muted); }
+    .stat .value {
+      font-size: 1.875rem;
+      font-weight: 700;
+      line-height: 1.25;
+      font-variant-numeric: tabular-nums;
+    }
+    @media (max-width: 640px) {
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .stat { border-top: 3px solid var(--stat-color, var(--border)); border-left: none; }
+    }
+
+    /* The layout fix: two columns that both start at the same top edge. The
+       job list scrolls inside its own fixed-height box instead of growing the
+       row, and the detail panel stays pinned in view as the page scrolls -
+       so it is never pushed below the fold by a long job list. */
+    .results {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      gap: var(--sp-5);
+      align-items: start;
+    }
+    @media (max-width: 860px) {
+      .results { grid-template-columns: 1fr; }
+    }
+    .jobs-panel { display: flex; flex-direction: column; }
+    .jobs-scroll {
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+    .detail-panel {
+      position: sticky;
+      top: var(--sp-6);
+    }
+
+    h2 {
+      font-size: .9375rem;
+      font-weight: 600;
+      margin: 0 0 var(--sp-4);
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: .8125rem; }
+    thead th {
+      position: sticky; top: 0;
+      background: var(--surface);
+      text-align: left;
+      font-weight: 600;
+      color: var(--muted);
+      padding: var(--sp-2) var(--sp-3);
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: var(--sp-2) var(--sp-3);
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    tbody tr:hover { background: var(--surface-muted); }
+    td.id {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: .75rem;
+      color: var(--muted);
+    }
+    td.attempts { font-variant-numeric: tabular-nums; }
+
     .badge {
-      display: inline-block; padding: 2px 8px; border-radius: 999px;
-      font-size: .7rem; font-weight: 600; color: #fff; text-transform: uppercase;
+      display: inline-flex;
+      align-items: center;
+      gap: var(--sp-1);
+      padding: var(--sp-1) var(--sp-3);
+      border-radius: 999px;
+      font-size: .75rem;
+      font-weight: 600;
     }
-    .badge.pending { background: var(--pending); }
-    .badge.running { background: var(--running); }
-    .badge.failed { background: var(--failed); }
-    .badge.completed { background: var(--completed); }
-    .empty, .error { color: var(--muted); font-size: .85rem; padding: 12px 0; }
-    .error { color: var(--failed); }
-    dl { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; margin: 0; font-size: .85rem; }
+    .badge .dot { width: 6px; height: 6px; }
+    .badge.pending   { background: rgba(100, 116, 139, .12); color: var(--pending); }
+    .badge.pending   .dot { background: var(--pending); }
+    .badge.running   { background: rgba(37, 99, 235, .12); color: var(--running); }
+    .badge.running   .dot { background: var(--running); }
+    .badge.failed    { background: rgba(220, 38, 38, .12); color: var(--failed); }
+    .badge.failed    .dot { background: var(--failed); }
+    .badge.completed { background: rgba(5, 150, 105, .12); color: var(--completed); }
+    .badge.completed .dot { background: var(--completed); }
+
+    .empty { color: var(--muted); font-size: .8125rem; padding: var(--sp-4) 0; }
+    .error { color: var(--failed); font-size: .8125rem; padding: var(--sp-2) 0; }
+
+    .search-row { display: flex; gap: var(--sp-2); margin-bottom: var(--sp-4); }
+    .search-row input { flex: 1; }
+
+    dl { margin: 0; font-size: .8125rem; }
+    dl > div {
+      display: grid;
+      grid-template-columns: 90px 1fr;
+      gap: var(--sp-2);
+      padding: var(--sp-2) 0;
+      border-bottom: 1px solid var(--border);
+    }
+    dl > div:last-child { border-bottom: none; }
     dt { color: var(--muted); }
     dd { margin: 0; word-break: break-all; }
+    dd.id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .75rem; }
   </style>
 </head>
 <body>
-  <h1>Job Queue Dashboard</h1>
-  <p class="sub">Status and job list refresh automatically every 2 seconds.</p>
-
-  <div id="message" hx-get="/jobqueue/dashboard/message" hx-trigger="load" hx-swap="innerHTML"></div>
-
-  <div class="card">
-    <div class="row">
-      <form class="col" hx-post="/jobqueue/dashboard/jobs/create"
-            hx-target="#jobs-table" hx-swap="innerHTML">
-        <div class="row">
-          <div class="col"><label for="job1">Job1</label>
-            <input id="job1" name="job1" value="{{.Defaults.Job1}}"></div>
-          <div class="col"><label for="job2">Job2</label>
-            <input id="job2" name="job2" value="{{.Defaults.Job2}}"></div>
-          <div class="col"><label for="job3">Job3</label>
-            <input id="job3" name="job3" value="{{.Defaults.Job3}}"></div>
-        </div>
-        <p><button type="submit">Create 3 Jobs</button></p>
-      </form>
+  <div class="stack">
+    <header class="page-header">
       <div>
-        <button hx-post="/jobqueue/dashboard/jobs/unstable"
-                hx-target="#jobs-table" hx-swap="innerHTML">Create Unstable Job</button>
-        <button class="secondary" hx-get="/jobqueue/dashboard/jobs"
-                hx-target="#jobs-table" hx-swap="innerHTML">Refresh</button>
-        <button hx-post="/jobqueue/dashboard/jobs/loadtest"
-                hx-target="#jobs-table" hx-swap="innerHTML"
-                hx-confirm="Enqueue 50 jobs against the 8-worker pool?">Load Test (50 Jobs)</button>
+        <h1>Job Queue</h1>
+        <p class="subhead">Watch jobs move through the queue in real time.</p>
+      </div>
+      <div id="message" hx-get="/jobqueue/dashboard/message" hx-trigger="load" hx-swap="innerHTML"></div>
+    </header>
+
+    <div class="card">
+      <div class="actions">
+        <form class="field-group" hx-post="/jobqueue/dashboard/jobs/create"
+              hx-target="#jobs-table" hx-swap="innerHTML">
+          <div class="field">
+            <label for="job1">Job 1</label>
+            <input id="job1" name="job1" value="{{.Defaults.Job1}}">
+          </div>
+          <div class="field">
+            <label for="job2">Job 2</label>
+            <input id="job2" name="job2" value="{{.Defaults.Job2}}">
+          </div>
+          <div class="field">
+            <label for="job3">Job 3</label>
+            <input id="job3" name="job3" value="{{.Defaults.Job3}}">
+          </div>
+          <div class="field" style="flex: 0 0 auto; align-self: flex-end;">
+            <button type="submit" class="btn btn-primary">Create 3 jobs</button>
+          </div>
+        </form>
+
+        <div class="button-row">
+          <button class="btn btn-primary" hx-post="/jobqueue/dashboard/jobs/unstable"
+                  hx-target="#jobs-table" hx-swap="innerHTML">Create unstable job</button>
+          <button class="btn btn-secondary" hx-get="/jobqueue/dashboard/jobs"
+                  hx-target="#jobs-table" hx-swap="innerHTML">Refresh</button>
+          <button class="btn btn-caution" hx-post="/jobqueue/dashboard/jobs/loadtest"
+                  hx-target="#jobs-table" hx-swap="innerHTML"
+                  hx-confirm="Enqueue 50 jobs against the 8-worker pool?">Load test - 50 jobs</button>
+        </div>
       </div>
     </div>
-  </div>
 
-  <div class="card">
-    <div id="status-summary"
-         hx-get="/jobqueue/dashboard/status"
-         hx-trigger="load, every 2s"
-         hx-swap="innerHTML"></div>
-  </div>
-
-  <div class="row">
-    <div class="card col" style="flex: 2 1 520px;">
-      <div id="jobs-table"
-           hx-get="/jobqueue/dashboard/jobs"
+    <div class="card">
+      <div id="status-summary"
+           hx-get="/jobqueue/dashboard/status"
            hx-trigger="load, every 2s"
            hx-swap="innerHTML"></div>
     </div>
 
-    <div class="card col">
-      <label for="job-id-input">Find a job by id</label>
-      <div class="row">
-        <input id="job-id-input" name="id" placeholder="paste a job id…">
-        <button hx-get="/jobqueue/dashboard/jobs/search"
-                hx-include="#job-id-input"
-                hx-target="#job-detail" hx-swap="innerHTML">Find</button>
+    <div class="results">
+      <div class="card jobs-panel">
+        <h2>Jobs</h2>
+        <div class="jobs-scroll">
+          <div id="jobs-table"
+               hx-get="/jobqueue/dashboard/jobs"
+               hx-trigger="load, every 2s"
+               hx-swap="innerHTML"></div>
+        </div>
       </div>
-      <div id="job-detail"><p class="empty">Select a job to see its details.</p></div>
+
+      <div class="card detail-panel">
+        <h2>Job detail</h2>
+        <div class="search-row">
+          <input id="job-id-input" name="id" placeholder="Paste a job ID…">
+          <button class="btn btn-secondary" hx-get="/jobqueue/dashboard/jobs/search"
+                  hx-include="#job-id-input"
+                  hx-target="#job-detail" hx-swap="innerHTML">Find</button>
+        </div>
+        <div id="job-detail"><p class="empty">Select a job to see its details.</p></div>
+      </div>
     </div>
   </div>
 </body>

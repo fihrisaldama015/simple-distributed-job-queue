@@ -138,7 +138,7 @@ func (h *DashboardHandler) JobSearch(c echo.Context) error {
 
 func (h *DashboardHandler) renderJob(c echo.Context, id string) error {
 	if id == "" {
-		return h.renderError(c, "Enter a job id to look one up.")
+		return h.renderError(c, "Enter a job ID to look one up.")
 	}
 
 	job, err := h.jobService.GetJob(c.Request().Context(), id)

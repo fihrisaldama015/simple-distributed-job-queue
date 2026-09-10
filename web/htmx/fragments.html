@@ -1,13 +1,13 @@
 {{define "message"}}
-<p class="sub">Connected — the worker pool is running and accepting jobs.</p>
+<span class="live"><span class="dot"></span>Connected</span>
 {{end}}
 
 {{define "status"}}
 <div class="stats">
-  <div class="stat"><div class="label">Pending</div><div class="value">{{.Pending}}</div></div>
-  <div class="stat"><div class="label">Running</div><div class="value">{{.Running}}</div></div>
-  <div class="stat"><div class="label">Failed</div><div class="value">{{.Failed}}</div></div>
-  <div class="stat"><div class="label">Completed</div><div class="value">{{.Completed}}</div></div>
+  <div class="stat stat-pending"><div class="label">Pending</div><div class="value">{{.Pending}}</div></div>
+  <div class="stat stat-running"><div class="label">Running</div><div class="value">{{.Running}}</div></div>
+  <div class="stat stat-failed"><div class="label">Failed</div><div class="value">{{.Failed}}</div></div>
+  <div class="stat stat-completed"><div class="label">Completed</div><div class="value">{{.Completed}}</div></div>
 </div>
 {{end}}
 
@@ -15,17 +15,17 @@
 {{if .}}
 <table>
   <thead>
-    <tr><th>ID</th><th>Task</th><th>Status</th><th>Attempts</th><th>View</th></tr>
+    <tr><th>ID</th><th>Task</th><th>Status</th><th>Attempts</th><th></th></tr>
   </thead>
   <tbody>
   {{range .}}
     <tr>
       <td class="id">{{.ID}}</td>
       <td>{{.Task}}</td>
-      <td><span class="badge {{.Status}}">{{.Status}}</span></td>
-      <td>{{.Attempts}}/{{.MaxAttempts}}</td>
+      <td><span class="badge {{.Status}}"><span class="dot"></span>{{.Status}}</span></td>
+      <td class="attempts">{{.Attempts}}/{{.MaxAttempts}}</td>
       <td>
-        <button class="secondary"
+        <button class="btn btn-secondary"
                 hx-get="/jobqueue/dashboard/jobs/{{.ID}}"
                 hx-target="#job-detail" hx-swap="innerHTML">View</button>
       </td>
@@ -34,18 +34,18 @@
   </tbody>
 </table>
 {{else}}
-<p class="empty">No jobs yet — use the buttons above to create some.</p>
+<p class="empty">No jobs yet. Create some above.</p>
 {{end}}
 {{end}}
 
 {{define "job_detail"}}
 <div hx-get="/jobqueue/dashboard/jobs/{{.ID}}" hx-trigger="every 2s" hx-swap="innerHTML">
   <dl>
-    <dt>ID</dt><dd class="id">{{.ID}}</dd>
-    <dt>Task</dt><dd>{{.Task}}</dd>
-    <dt>Status</dt><dd><span class="badge {{.Status}}">{{.Status}}</span></dd>
-    <dt>Attempts</dt><dd>{{.Attempts}} of {{.MaxAttempts}}</dd>
-    {{if .LastError}}<dt>Last error</dt><dd class="error">{{.LastError}}</dd>{{end}}
+    <div><dt>ID</dt><dd class="id">{{.ID}}</dd></div>
+    <div><dt>Task</dt><dd>{{.Task}}</dd></div>
+    <div><dt>Status</dt><dd><span class="badge {{.Status}}"><span class="dot"></span>{{.Status}}</span></dd></div>
+    <div><dt>Attempts</dt><dd>{{.Attempts}} of {{.MaxAttempts}}</dd></div>
+    {{if .LastError}}<div><dt>Last error</dt><dd class="error">{{.LastError}}</dd></div>{{end}}
   </dl>
 </div>
 {{end}}
