@@ -1,6 +1,13 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+
 	"jobqueue/config"
 	"jobqueue/delivery/graphql"
 	_dataloader "jobqueue/delivery/graphql/dataloader"
@@ -9,10 +16,12 @@ import (
 	"jobqueue/delivery/graphql/schema"
 	_htmx "jobqueue/delivery/htmx"
 	"jobqueue/entity"
+	"jobqueue/pkg/constant"
 	"jobqueue/pkg/handler"
 	"jobqueue/pkg/server"
 	inmemrepo "jobqueue/repository/inmem"
 	"jobqueue/service"
+	"jobqueue/worker"
 	"time"
 
 	_graphql "github.com/graph-gophers/graphql-go"
@@ -20,15 +29,12 @@ import (
 
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/sirupsen/logrus"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
 func main() {
 	setupLogger()
-	logger := logrus.New()
-	logger.SetReportCaller(true)
 	e := server.New(config.Data.Server)
 	e.Echo.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
 		Format: "${remote_ip} ${time_rfc3339_nano} \"${method} ${path}\" ${status} ${bytes_out} \"${referer}\" \"${user_agent}\"\n",
@@ -56,9 +62,28 @@ func main() {
 		SetBatchFunction().
 		Build()
 
+	//set the task handlers: anything unregistered falls back to simulated work
+	taskRegistry := worker.NewRegistry(config.Data.Queue.TaskDuration)
+	taskRegistry.Register(constant.TaskUnstableJob,
+		worker.UnstableHandler(config.Data.Queue.UnstableFailures, config.Data.Queue.TaskDuration))
+
+	//start the worker pool
+	pool := worker.New(worker.Config{
+		Workers:       config.Data.Queue.Workers,
+		QueueSize:     config.Data.Queue.QueueSize,
+		MaxAttempts:   config.Data.Queue.MaxAttempts,
+		BaseBackoff:   config.Data.Queue.BaseBackoff,
+		MaxBackoff:    config.Data.Queue.MaxBackoff,
+		ShutdownGrace: config.Data.Queue.ShutdownGrace,
+	}, jobRepository, taskRegistry, zap.L())
+	pool.Start()
+
 	//set job service
 	jobService := service.NewJobService().
 		SetJobRepository(jobRepository).
+		SetJobDispatcher(pool).
+		SetMaxAttempts(config.Data.Queue.MaxAttempts).
+		SetLogger(zap.L()).
 		Build()
 
 	jobMutation := mutation.NewJobMutation(jobService, dataloader)
@@ -85,7 +110,28 @@ func main() {
 	e.Echo.GET("/jobqueue/dashboard", helloHandler.Page)
 	e.Echo.GET("/jobqueue/dashboard/message", helloHandler.Message)
 
-	e.Echo.Logger.Fatal(e.Start())
+	go func() {
+		if err := e.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			zap.L().Fatal("server.start_failed", zap.Error(err))
+		}
+	}()
+
+	// Stop accepting requests first, then let in-flight jobs finish.
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
+	<-signalCh
+
+	zap.L().Info("server.stopping")
+	ctx, cancel := context.WithTimeout(context.Background(), config.Data.Queue.ShutdownGrace)
+	defer cancel()
+
+	if err := e.Echo.Shutdown(ctx); err != nil {
+		zap.L().Error("server.shutdown_failed", zap.Error(err))
+	}
+	if err := pool.Shutdown(ctx); err != nil {
+		zap.L().Error("pool.shutdown_failed", zap.Error(err))
+	}
+	zap.L().Info("server.stopped")
 }
 
 func setupLogger() {
