@@ -5,9 +5,25 @@ import (
 	"jobqueue/entity"
 )
 
+// JobService is the application-facing API. Every delivery layer — GraphQL and the
+// HTMX dashboard — talks to the system exclusively through this interface.
 type JobService interface {
-	Enqueue(ctx context.Context, taskName string) (string, error)
-	GetAllJobs(ctx context.Context) (output entity.Job, err error)
+	// Enqueue registers a new job and hands it to the dispatcher. idempotencyKey may
+	// be empty; when non-empty, a second call with the same key returns the job
+	// created by the first call and enqueues nothing.
+	//
+	// The returned job is the job as enqueued: pending, with zero attempts. Execution
+	// happens in the background.
+	Enqueue(ctx context.Context, task string, idempotencyKey string) (*entity.Job, error)
+
+	// GetJob returns entity.ErrJobNotFound when no job carries that id.
+	GetJob(ctx context.Context, id string) (*entity.Job, error)
+
+	// GetAllJobs returns every job, oldest first. Never nil.
+	GetAllJobs(ctx context.Context) ([]*entity.Job, error)
+
+	// GetJobStatus counts jobs in each of the four states.
+	GetJobStatus(ctx context.Context) (entity.JobStatus, error)
 }
 
 type JobRepository interface {
