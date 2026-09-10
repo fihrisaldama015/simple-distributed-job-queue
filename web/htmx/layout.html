@@ -267,19 +267,23 @@
 
     .jobs-header {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: var(--sp-3);
+      flex-direction: column;
+      gap: var(--sp-2);
       margin-bottom: var(--sp-4);
     }
     .jobs-header h2 { margin: 0; }
 
-    .table-toolbar { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
-    .filter-group { display: flex; gap: var(--sp-1); }
+    .table-toolbar {
+      display: flex;
+      align-items: center;
+      gap: var(--sp-2);
+      flex-wrap: nowrap;
+      overflow-x: auto;
+    }
+    .filter-group { display: flex; gap: var(--sp-1); flex: none; }
     .filter-chip {
-      height: 28px;
-      padding: 0 var(--sp-3);
+      height: 26px;
+      padding: 0 var(--sp-2);
       border: 1px solid var(--border);
       border-radius: 999px;
       background: var(--surface);
@@ -287,20 +291,27 @@
       font-size: .75rem;
       font-weight: 600;
       cursor: pointer;
+      white-space: nowrap;
+      flex: none;
     }
     .filter-chip:hover { background: var(--surface-muted); }
     .filter-chip.active { background: var(--ink); border-color: var(--ink); color: #fff; }
 
-    .task-search {
-      height: 28px;
-      width: 160px;
+    /* input.task-search (element+class) so this reliably beats the global
+       "input[type=\"text\"] { width: 100% }" rule above, which is an attribute
+       selector - equal-looking specificity to a class, but easy to lose against
+       by accident with a plain ".task-search" selector. */
+    input.task-search {
+      height: 26px;
+      width: 110px;
+      flex: none;
       padding: 0 var(--sp-2);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       font-size: .8125rem;
     }
 
-    #sort-toggle { height: 28px; padding: 0 var(--sp-3); font-size: .75rem; }
+    #sort-toggle { height: 26px; padding: 0 var(--sp-2); font-size: .75rem; flex: none; white-space: nowrap; }
 
     table { width: 100%; border-collapse: collapse; font-size: .8125rem; }
     thead th {
@@ -507,7 +518,7 @@
             <input type="text" id="task-search" name="task" class="task-search"
                    placeholder="Search task…">
 
-            <button type="button" class="btn btn-secondary" id="sort-toggle">Oldest first</button>
+            <button type="button" class="btn btn-secondary" id="sort-toggle">&uarr; Oldest</button>
             <input type="hidden" id="sort-value" name="sort" value="oldest">
           </div>
         </div>
@@ -609,7 +620,10 @@
       sortToggle.addEventListener('click', function () {
         var newest = sortValue.value !== 'newest';
         sortValue.value = newest ? 'newest' : 'oldest';
-        sortToggle.textContent = newest ? 'Newest first' : 'Oldest first';
+        // textContent doesn't decode HTML entities, so this uses the literal
+        // Unicode arrows directly rather than &uarr;/&darr; (only the static
+        // markup's entities get decoded, by the HTML parser, not by JS).
+        sortToggle.textContent = newest ? '↓ Newest' : '↑ Oldest';
         htmx.trigger(document.body, 'jobs-filter-changed');
       });
     })();
