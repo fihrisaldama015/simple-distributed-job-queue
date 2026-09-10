@@ -194,10 +194,14 @@ asynchronous — the job has not run yet. Take the returned id and poll:
 query GetJobById { Job(id: "PASTE_ID") { id task status attempts } }
 ```
 
-Within about two seconds it reads `status: "completed", attempts: 3` — two simulated
-failures, then a success. The dashboard shows the same thing live: click
-**Create Unstable Job** and watch the row climb `1/3 → 2/3 → 3/3`, or open its detail
-panel, which polls itself every 2 seconds.
+Within about five seconds it reads `status: "completed", attempts: 3` - each attempt,
+failing or not, simulates the same work duration, so the retry cycle takes long enough
+to actually watch rather than flashing past. The dashboard shows the same thing live:
+click **Create Unstable Job** and watch the row climb `1/3 → 2/3 → 3/3`. While it's
+retrying, the row also shows the reason the previous attempt failed - so a "running"
+row you catch on attempt 2 or 3 reads as "retrying after a failure", not as a
+duplicate of the first run. Open its detail panel to watch the same thing up close; it
+polls itself every 2 seconds.
 
 ### Idempotency
 

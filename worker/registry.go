@@ -71,12 +71,20 @@ func SimulatedWork(d time.Duration) _interface.TaskHandler {
 // The decision is derived from the job's own Attempts counter, which the pool has
 // already incremented when claiming this run. The handler therefore holds no state:
 // two unstable jobs running concurrently cannot interfere with each other.
+//
+// Every attempt simulates `work` first, whether it goes on to fail or succeed - a
+// real failing call rarely errors instantly, and an instant failure would give the
+// retry cycle no visible "running" dwell time for a 2s dashboard poll (or a human) to
+// ever catch.
 func UnstableHandler(failures int32, work time.Duration) _interface.TaskHandler {
 	return func(ctx context.Context, job entity.Job) error {
+		if err := SimulatedWork(work)(ctx, job); err != nil {
+			return err
+		}
 		if job.Attempts <= failures {
 			return fmt.Errorf("unstable-job: simulated failure on attempt %d of %d",
 				job.Attempts, job.MaxAttempts)
 		}
-		return SimulatedWork(work)(ctx, job)
+		return nil
 	}
 }

@@ -48,6 +48,24 @@ func TestSimulatedWorkHonoursContextCancellation(t *testing.T) {
 	}
 }
 
+// A failing attempt must take roughly the same time as a successful one - a real
+// failing task (a timed-out call, a rejected request) rarely fails instantly, and an
+// instant failure gives a retry cycle no visible dwell time for a poll to catch.
+func TestUnstableHandlerSimulatesWorkOnFailingAttemptsToo(t *testing.T) {
+	handler := UnstableHandler(2, 30*time.Millisecond)
+
+	start := time.Now()
+	err := handler(context.Background(), entity.Job{ID: "job-1", Attempts: 1, MaxAttempts: 3})
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("attempt 1: got nil, want an error")
+	}
+	if elapsed < 30*time.Millisecond {
+		t.Fatalf("failing attempt took %s, want at least 30ms - it must not fail instantly", elapsed)
+	}
+}
+
 func TestUnstableHandlerFailsTwiceThenSucceeds(t *testing.T) {
 	handler := UnstableHandler(2, 0)
 
